@@ -3,6 +3,8 @@ from django.http import JsonResponse
 from django.contrib import messages
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
+from datetime import datetime
+import pytz
 import json
 import logging
 from .models import Device, SensorData
@@ -52,19 +54,72 @@ def dashboard_view(request):
     # Get latest sensor data
     latest_sensor = SensorData.objects.order_by('-timestamp').first()
     
-    # Get recent sensor data for charts (last 10 readings)
-    recent_sensors = SensorData.objects.order_by('-timestamp')[:10]
+    # Get recent sensor data for charts (last 20 readings for better chart visualization)
+    recent_sensors = SensorData.objects.order_by('-timestamp')[:20]
+    
+    # Setup Thai timezone
+    thai_tz = pytz.timezone('Asia/Bangkok')
+    
+    # Convert recent sensors to Thai time for template display
+    recent_sensors_thai = []
+    for sensor in recent_sensors:
+        sensor_thai = {
+            'id': sensor.id,
+            'device_name': sensor.device_name,
+            'temperature': sensor.temperature,
+            'humidity': sensor.humidity,
+            'timestamp': sensor.timestamp.astimezone(thai_tz)
+        }
+        recent_sensors_thai.append(sensor_thai)
+    
+    # Calculate sensor statistics
+    sensor_stats = {
+        'total_readings': SensorData.objects.count(),
+        'latest_temp': None,
+        'latest_humidity': None,
+        'temp_stats': {'min': 0, 'max': 0, 'avg': 0},
+        'humidity_stats': {'min': 0, 'max': 0, 'avg': 0}
+    }
+    
+    if latest_sensor:
+        sensor_stats['latest_temp'] = latest_sensor.temperature
+        sensor_stats['latest_humidity'] = latest_sensor.humidity
+    
+    # Calculate temperature statistics
+    temp_data = SensorData.objects.filter(temperature__isnull=False).order_by('-timestamp')[:50]
+    if temp_data.exists():
+        temps = [s.temperature for s in temp_data]
+        sensor_stats['temp_stats'] = {
+            'min': min(temps),
+            'max': max(temps),
+            'avg': sum(temps) / len(temps)
+        }
+    
+    # Calculate humidity statistics  
+    humidity_data = SensorData.objects.filter(humidity__isnull=False).order_by('-timestamp')[:50]
+    if humidity_data.exists():
+        humidities = [s.humidity for s in humidity_data]
+        sensor_stats['humidity_stats'] = {
+            'min': min(humidities),
+            'max': max(humidities),
+            'avg': sum(humidities) / len(humidities)
+        }
     
     # ได้รับสถานะ MQTT Manager
     mqtt_manager = get_mqtt_manager()
     mqtt_status = mqtt_manager.get_status()
     
+    # Get current Thai time
+    current_thai_time = timezone.now().astimezone(thai_tz)
+    
     context = {
         'led': led_device,
         'latest_sensor': latest_sensor,
-        'recent_sensors': recent_sensors,
+        'recent_sensors': recent_sensors_thai,  # Use Thai time version
+        'sensor_stats': sensor_stats,
         'mqtt_status': mqtt_status,
-        'last_updated': timezone.now().strftime("%d/%m/%Y %H:%M:%S"),
+        'last_updated': current_thai_time.strftime("%d/%m/%Y %H:%M:%S"),
+        'current_time': current_thai_time,
     }
     return render(request, 'iot_dashboard/dashboard.html', context)
 
@@ -178,27 +233,101 @@ def api_sensor_data(request):
     """API สำหรับดึงข้อมูล sensor"""
     try:
         # ดึงข้อมูล sensor ล่าสุด
-        limit = int(request.GET.get('limit', 10))
+        limit = int(request.GET.get('limit', 20))
         sensors = SensorData.objects.order_by('-timestamp')[:limit]
+        
+        # Setup Thai timezone
+        thai_tz = pytz.timezone('Asia/Bangkok')
         
         data = []
         for sensor in sensors:
+            # Convert timestamp to Thai time
+            thai_time = sensor.timestamp.astimezone(thai_tz)
             data.append({
                 'id': sensor.id,
-                'temperature': float(sensor.temperature),
-                'humidity': float(sensor.humidity),
-                'timestamp': sensor.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                'temperature': float(sensor.temperature) if sensor.temperature is not None else None,
+                'humidity': float(sensor.humidity) if sensor.humidity is not None else None,
+                'timestamp': thai_time.strftime('%Y-%m-%d %H:%M:%S'),
                 'device_name': sensor.device_name
             })
+        
+        # คำนวณสถิติ
+        temp_values = [d['temperature'] for d in data if d['temperature'] is not None]
+        humidity_values = [d['humidity'] for d in data if d['humidity'] is not None]
+        
+        stats = {
+            'temperature': {
+                'min': min(temp_values) if temp_values else 0,
+                'max': max(temp_values) if temp_values else 0,
+                'avg': sum(temp_values) / len(temp_values) if temp_values else 0,
+                'count': len(temp_values)
+            },
+            'humidity': {
+                'min': min(humidity_values) if humidity_values else 0,
+                'max': max(humidity_values) if humidity_values else 0,
+                'avg': sum(humidity_values) / len(humidity_values) if humidity_values else 0,
+                'count': len(humidity_values)
+            }
+        }
         
         return JsonResponse({
             'success': True,
             'data': data,
+            'stats': stats,
             'count': len(data)
         })
         
     except Exception as e:
         logger.error(f"❌ API Error: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+def api_chart_data(request):
+    """API สำหรับดึงข้อมูลกราฟแบบ real-time"""
+    try:
+        # ดึงข้อมูลล่าสุด 50 รายการ
+        sensors = SensorData.objects.order_by('-timestamp')[:50]
+        
+        # Setup Thai timezone
+        thai_tz = pytz.timezone('Asia/Bangkok')
+        
+        # จัดรูปแบบข้อมูลสำหรับ Chart.js
+        chart_data = {
+            'labels': [],
+            'temperature': [],
+            'humidity': []
+        }
+        
+        for sensor in reversed(sensors):  # เรียงจากเก่าไปใหม่
+            # Convert to Thai time for display
+            thai_time = sensor.timestamp.astimezone(thai_tz)
+            chart_data['labels'].append(thai_time.strftime('%H:%M:%S'))
+            chart_data['temperature'].append(
+                float(sensor.temperature) if sensor.temperature is not None else None
+            )
+            chart_data['humidity'].append(
+                float(sensor.humidity) if sensor.humidity is not None else None
+            )
+        
+        # ข้อมูลล่าสุด
+        latest = sensors.first() if sensors else None
+        latest_data = {
+            'temperature': float(latest.temperature) if latest and latest.temperature else None,
+            'humidity': float(latest.humidity) if latest and latest.humidity else None,
+            'timestamp': latest.timestamp.astimezone(thai_tz).strftime('%Y-%m-%d %H:%M:%S') if latest else None
+        }
+        
+        return JsonResponse({
+            'success': True,
+            'chart_data': chart_data,
+            'latest': latest_data,
+            'total_points': len(sensors)
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ Chart Data API Error: {e}")
         return JsonResponse({
             'success': False,
             'error': str(e)

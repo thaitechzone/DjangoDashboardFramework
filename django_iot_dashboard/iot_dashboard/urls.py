@@ -6,5 +6,6 @@ urlpatterns = [
     path('control-led/', views.control_led, name='control_led'),
     path('api/control-led/', views.api_control_led, name='api_control_led'),
     path('api/sensor-data/', views.api_sensor_data, name='api_sensor_data'),
+    path('api/chart-data/', views.api_chart_data, name='api_chart_data'),
     path('api/mqtt-status/', views.api_mqtt_status, name='api_mqtt_status'),
 ]

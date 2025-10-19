@@ -1,252 +1,181 @@
+{% load static %}
+{% load timezone_filters %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>IoT Dashboard</title>
-    <meta http-equiv="refresh" content="5"> <!-- Auto-refresh ทุก 2 วินาที -->
+    <title>🏠 IoT Dashboard with Real-time Charts</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Chart.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" type="text/css" href="{% static 'iot_dashboard/dashboard.css' %}">
+    
     <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            padding: 20px; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        /* Dashboard Header */
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #e8f4fd;
+        }
+
+        .dashboard-header h1 {
             margin: 0;
-            min-height: 100vh;
+            font-size: 2.5rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-        .dashboard-container { 
-            max-width: 1200px; 
-            margin: 0 auto; 
+
+        .header-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.5rem;
         }
-        .device { 
-            border: 2px solid #fff; 
-            padding: 25px; 
-            margin: 15px; 
-            border-radius: 15px; 
-            width: 280px; 
-            background: rgba(255, 255, 255, 0.95);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(10px);
-            display: inline-block;
-            vertical-align: top;
-            transition: transform 0.3s ease;
-        }
-        .device:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
-        }
-        .status-on { 
-            color: #28a745; 
-            font-weight: bold; 
-            font-size: 20px;
-            text-shadow: 0 0 10px rgba(40, 167, 69, 0.3);
-        }
-        .status-off { 
-            color: #6c757d; 
-            font-weight: bold; 
-            font-size: 20px;
-        }
-        .last-updated {
-            font-size: 13px;
-            color: #6c757d;
-            margin-top: 15px;
-            padding-top: 10px;
-            border-top: 1px solid #e9ecef;
-        }
-        h1 {
+
+        .datetime-display {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #2c3e50;
+            background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
-            text-align: center;
-            margin-bottom: 30px;
-            font-size: 2.5em;
-            text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            box-shadow: 0 2px 10px rgba(102, 126, 234, 0.3);
         }
-        h2 {
-            color: #333;
-            font-size: 1.4em;
-            margin-bottom: 15px;
+
+        .update-status {
+            font-size: 0.9rem;
+            color: #7f8c8d;
         }
-        .led-indicator {
-            width: 25px;
-            height: 25px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 15px;
-            vertical-align: middle;
+
+        .text-muted {
+            color: #6c757d !important;
+        }
+
+        /* Manual refresh button */
+        .manual-refresh-btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 0.4rem 0.8rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-left: 0.5rem;
             transition: all 0.3s ease;
+            box-shadow: 0 2px 5px rgba(102, 126, 234, 0.3);
         }
-        .led-on {
-            background: radial-gradient(circle, #28a745 0%, #20c997 100%);
-            box-shadow: 0 0 20px rgba(40, 167, 69, 0.6), 0 0 40px rgba(40, 167, 69, 0.4);
-            animation: pulse 2s infinite;
+
+        .manual-refresh-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(102, 126, 234, 0.4);
         }
-        .led-off {
-            background: #6c757d;
-            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.3);
+
+        .manual-refresh-btn:active {
+            transform: translateY(0);
         }
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); }
-        }
+
+        /* Auto-refresh indicator */
         .auto-refresh-indicator {
             position: fixed;
             top: 20px;
             right: 20px;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 10px 15px;
+            background: linear-gradient(135deg, #11998e, #38ef7d);
+            color: white;
+            padding: 0.75rem 1.25rem;
             border-radius: 25px;
-            font-size: 12px;
-            color: #666;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            font-size: 0.9rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 15px rgba(17, 153, 142, 0.3);
+            z-index: 1000;
+            animation: pulseGlow 2s infinite;
         }
+
         .refresh-dot {
             width: 8px;
             height: 8px;
-            background: #28a745;
+            background: #fff;
             border-radius: 50%;
-            display: inline-block;
-            margin-right: 8px;
-            animation: blink 1s infinite;
+            animation: blink 1.5s infinite;
         }
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
-        }
-        
-        /* Control Buttons Styles */
-        .control-section {
-            margin-top: 20px;
-            padding-top: 15px;
-            border-top: 2px solid #e9ecef;
-        }
-        .control-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-            flex-wrap: wrap;
-        }
-        .btn {
-            padding: 12px 20px;
-            border: none;
-            border-radius: 8px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 14px;
-            min-width: 80px;
-            text-align: center;
-        }
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-        }
-        .btn-success {
-            background: linear-gradient(45deg, #28a745, #20c997);
-            color: white;
-            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
-        }
-        .btn-success:hover {
-            background: linear-gradient(45deg, #218838, #1ea384);
-        }
-        .btn-danger {
-            background: linear-gradient(45deg, #dc3545, #e74c3c);
-            color: white;
-            box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
-        }
-        .btn-danger:hover {
-            background: linear-gradient(45deg, #c82333, #dc2d3a);
-        }
-        .btn-info {
-            background: linear-gradient(45deg, #17a2b8, #6f42c1);
-            color: white;
-            box-shadow: 0 4px 15px rgba(23, 162, 184, 0.3);
-        }
-        .btn-info:hover {
-            background: linear-gradient(45deg, #138496, #5a2d91);
-        }
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none !important;
-        }
-        .status-indicator {
-            font-size: 16px;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-        .messages {
-            margin-top: 15px;
-            padding: 10px;
-            border-radius: 8px;
-            font-size: 14px;
-        }
-        .messages.success {
-            background: rgba(40, 167, 69, 0.1);
-            color: #155724;
-            border: 1px solid rgba(40, 167, 69, 0.3);
-        }
-        .messages.error {
-            background: rgba(220, 53, 69, 0.1);
-            color: #721c24;
-            border: 1px solid rgba(220, 53, 69, 0.3);
-        }
-        
-        /* Sensor Card Styles */
-        .sensor-card {
-            border: 2px solid #fff; 
-            padding: 25px; 
-            margin: 15px; 
-            border-radius: 15px; 
-            width: 280px; 
-            background: rgba(255, 255, 255, 0.95);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(10px);
-            display: inline-block;
-            vertical-align: top;
-            transition: transform 0.3s ease;
-        }
-        .sensor-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
-        }
-        .sensor-value {
-            font-size: 24px;
-            font-weight: bold;
-            margin: 10px 0;
-            padding: 15px;
+
+        .real-time-badge {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.25rem 0.5rem;
             border-radius: 10px;
-            text-align: center;
+            font-size: 0.8rem;
+            letter-spacing: 1px;
         }
-        .temp-value {
-            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
-            color: white;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
         }
-        .humidity-value {
-            background: linear-gradient(135deg, #4ecdc4, #3742fa);
-            color: white;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+
+        @keyframes pulseGlow {
+            0%, 100% { 
+                transform: scale(1);
+                box-shadow: 0 4px 15px rgba(17, 153, 142, 0.3);
+            }
+            50% { 
+                transform: scale(1.02);
+                box-shadow: 0 6px 20px rgba(17, 153, 142, 0.5);
+            }
         }
-        .sensor-status {
-            font-size: 14px;
-            color: #666;
-            text-align: center;
-            margin-top: 10px;
+
+        /* Additional specific styles can go here */
+        .chart-update-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(40, 167, 69, 0.1);
+            color: #28a745;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 11px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
         }
-        .no-data {
-            background: linear-gradient(135deg, #95a5a6, #7f8c8d);
-            color: white;
+        .chart-update-indicator.active {
+            opacity: 1;
         }
+    </style>
     </style>
 </head>
 <body>
     <div class="auto-refresh-indicator">
-        <span class="refresh-dot"></span>Auto-refresh: ON
+        <span class="refresh-dot"></span>Real-time Updates
+        <span class="real-time-badge">LIVE</span>
     </div>
     
     <div class="dashboard-container">
-        <h1>🏠 IoT Dashboard with Sensors</h1>
+        <div class="dashboard-header">
+            <h1>🏠 IoT Dashboard with Real-time Charts</h1>
+            <div class="header-info">
+                <div class="datetime-display">
+                    <span id="current-time">{{ last_updated }}</span>
+                </div>
+                <div class="update-status">
+                    <span id="last-update" class="text-muted">อัพเดทอัตโนมัติทุก 5 วินาที</span>
+                    <button onclick="refreshNow()" class="manual-refresh-btn" title="Refresh Now">
+                        🔄 รีเฟรช
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <!-- Messages Display -->
         {% if messages %}
@@ -257,189 +186,782 @@
             {% endfor %}
         {% endif %}
 
-        <!-- LED Control Device -->
-        <div class="device">
-            <h2>💡 {{ led.name }}</h2>
-            
-            <!-- Status Display -->
-            <div class="status-indicator">
-                <span class="led-indicator {% if led.is_on %}led-on{% else %}led-off{% endif %}"></span>
-                Status:
-                {% if led.is_on %}
-                    <span class="status-on">🟢 ON</span>
-                {% else %}
-                    <span class="status-off">⚫ OFF</span>
-                {% endif %}
-            </div>
-            
-            <!-- Control Section -->
-            <div class="control-section">
-                <h3>🎮 Remote Control</h3>
-                <div class="control-buttons">
-                    <form method="post" action="{% url 'control_led' %}" style="display: inline;">
-                        {% csrf_token %}
-                        <button type="submit" name="action" value="on" class="btn btn-success">
-                            🟢 Turn ON
-                        </button>
-                    </form>
-                    
-                    <form method="post" action="{% url 'control_led' %}" style="display: inline;">
-                        {% csrf_token %}
-                        <button type="submit" name="action" value="off" class="btn btn-danger">
-                            ⚫ Turn OFF
-                        </button>
-                    </form>
-                    
-                    <form method="post" action="{% url 'control_led' %}" style="display: inline;">
-                        {% csrf_token %}
-                        <button type="submit" name="action" value="toggle" class="btn btn-info">
-                            🔄 Toggle
-                        </button>
-                    </form>
+        <!-- Device Control Grid -->
+        <div class="dashboard-grid">
+            <!-- LED Control Device -->
+            <div class="device">
+                <h2>💡 {{ led.name }}</h2>
+                
+                <!-- Status Display -->
+                <div class="status-indicator">
+                    <span class="led-indicator {% if led.is_on %}led-on{% else %}led-off{% endif %}"></span>
+                    Status:
+                    {% if led.is_on %}
+                        <span class="status-on">🟢 ON</span>
+                    {% else %}
+                        <span class="status-off">⚫ OFF</span>
+                    {% endif %}
                 </div>
                 
-                <!-- MQTT Info -->
+                <!-- Control Section -->
+                <div class="control-section">
+                    <h3>🎮 Remote Control</h3>
+                    <div class="control-buttons">
+                        <form method="post" action="{% url 'control_led' %}" style="display: inline;">
+                            {% csrf_token %}
+                            <button type="submit" name="action" value="on" class="btn btn-success">
+                                🟢 Turn ON
+                            </button>
+                        </form>
+                        
+                        <form method="post" action="{% url 'control_led' %}" style="display: inline;">
+                            {% csrf_token %}
+                            <button type="submit" name="action" value="off" class="btn btn-danger">
+                                ⚫ Turn OFF
+                            </button>
+                        </form>
+                        
+                        <form method="post" action="{% url 'control_led' %}" style="display: inline;">
+                            {% csrf_token %}
+                            <button type="submit" name="action" value="toggle" class="btn btn-info">
+                                🔄 Toggle
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <!-- MQTT Info -->
+                    <div style="margin-top: 15px; font-size: 12px; color: #6c757d;">
+                        <strong>📡 MQTT Topics:</strong><br>
+                        • Control: <code>thaitechzone/v2_board/control/led</code><br>
+                        • Status: <code>thaitechzone/v2_board/state/led</code>
+                    </div>
+                </div>
+                
+                <div class="last-updated">
+                    <strong>Last Updated:</strong> {{ led.get_last_updated_thai }}<br>
+                    <strong>Auto-refresh:</strong> Every 5 seconds
+                </div>
+            </div>
+
+            <!-- Temperature Sensor -->
+            <div class="sensor-card">
+                <h2>🌡️ Temperature Sensor</h2>
+                
+                {% if latest_sensor and latest_sensor.temperature is not None %}
+                    <div class="sensor-value temp-value">
+                        {{ latest_sensor.get_temperature_display }}
+                    </div>
+                    <div class="sensor-status">
+                        📅 Last Reading: {{ latest_sensor.get_timestamp_thai }}
+                    </div>
+                {% else %}
+                    <div class="sensor-value no-data">
+                        📊 No Data Available
+                    </div>
+                    <div class="sensor-status">
+                        ⚠️ Waiting for sensor data...
+                    </div>
+                {% endif %}
+                
                 <div style="margin-top: 15px; font-size: 12px; color: #6c757d;">
-                    <strong>📡 MQTT Topics:</strong><br>
-                    • Control: <code>thaitechzone/v2_board/control/led</code><br>
-                    • Status: <code>thaitechzone/v2_board/state/led</code>
+                    <strong>📡 MQTT Topic:</strong><br>
+                    • Data: <code>thaitechzone/v2_board/sensors/data</code>
                 </div>
             </div>
-            
-            <div class="last-updated">
-                <strong>Last Updated:</strong> {{ led.get_last_updated_thai }}<br>
-                <strong>Auto-refresh:</strong> Every 5 seconds
+
+            <!-- Humidity Sensor -->
+            <div class="sensor-card">
+                <h2>💧 Humidity Sensor</h2>
+                
+                {% if latest_sensor and latest_sensor.humidity is not None %}
+                    <div class="sensor-value humidity-value">
+                        {{ latest_sensor.get_humidity_display }}
+                    </div>
+                    <div class="sensor-status">
+                        📅 Last Reading: {{ latest_sensor.get_timestamp_thai }}
+                    </div>
+                {% else %}
+                    <div class="sensor-value no-data">
+                        📊 No Data Available
+                    </div>
+                    <div class="sensor-status">
+                        ⚠️ Waiting for sensor data...
+                    </div>
+                {% endif %}
+                
+                <div style="margin-top: 15px; font-size: 12px; color: #6c757d;">
+                    <strong>📈 Sensor Info:</strong><br>
+                    • Type: DHT22/AM2302<br>
+                    • Accuracy: ±0.5°C, ±2-5%RH
+                </div>
             </div>
         </div>
 
-        <!-- Temperature Sensor -->
-        <div class="sensor-card">
-            <h2>🌡️ Temperature Sensor</h2>
-            
-            {% if latest_sensor and latest_sensor.temperature is not None %}
-                <div class="sensor-value temp-value">
-                    {{ latest_sensor.get_temperature_display }}
+        <!-- Charts Section -->
+        {% if recent_sensors %}
+        <div class="chart-grid">
+            <!-- Temperature Chart -->
+            <div class="chart-container">
+                <h3 class="chart-title">
+                    🌡️ Temperature Trend
+                    <span class="chart-update-indicator" id="tempUpdateIndicator">Updated</span>
+                </h3>
+                <div class="chart-wrapper">
+                    <canvas id="temperatureChart"></canvas>
                 </div>
-                <div class="sensor-status">
-                    📅 Last Reading: {{ latest_sensor.get_timestamp_thai }}
+                <div class="chart-stats">
+                    <div class="stat-item">
+                        <div class="stat-value temp-stat" id="tempCurrent">
+                            {% if latest_sensor %}{{ latest_sensor.get_temperature_display }}{% else %}--{% endif %}
+                        </div>
+                        <div class="stat-label">Current</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value temp-stat" id="tempMax">--</div>
+                        <div class="stat-label">Max</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value temp-stat" id="tempMin">--</div>
+                        <div class="stat-label">Min</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value temp-stat" id="tempAvg">--</div>
+                        <div class="stat-label">Average</div>
+                    </div>
                 </div>
-            {% else %}
-                <div class="sensor-value no-data">
-                    📊 No Data Available
-                </div>
-                <div class="sensor-status">
-                    ⚠️ Waiting for sensor data...
-                </div>
-            {% endif %}
-            
-            <div style="margin-top: 15px; font-size: 12px; color: #6c757d;">
-                <strong>📡 MQTT Topic:</strong><br>
-                • Data: <code>thaitechzone/v2_board/sensors/data</code>
             </div>
-        </div>
 
-        <!-- Humidity Sensor -->
-        <div class="sensor-card">
-            <h2>💧 Humidity Sensor</h2>
-            
-            {% if latest_sensor and latest_sensor.humidity is not None %}
-                <div class="sensor-value humidity-value">
-                    {{ latest_sensor.get_humidity_display }}
+            <!-- Humidity Chart -->
+            <div class="chart-container">
+                <h3 class="chart-title">
+                    💧 Humidity Trend
+                    <span class="chart-update-indicator" id="humUpdateIndicator">Updated</span>
+                </h3>
+                <div class="chart-wrapper">
+                    <canvas id="humidityChart"></canvas>
                 </div>
-                <div class="sensor-status">
-                    📅 Last Reading: {{ latest_sensor.get_timestamp_thai }}
+                <div class="chart-stats">
+                    <div class="stat-item">
+                        <div class="stat-value humidity-stat" id="humCurrent">
+                            {% if latest_sensor %}{{ latest_sensor.get_humidity_display }}{% else %}--{% endif %}
+                        </div>
+                        <div class="stat-label">Current</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value humidity-stat" id="humMax">--</div>
+                        <div class="stat-label">Max</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value humidity-stat" id="humMin">--</div>
+                        <div class="stat-label">Min</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value humidity-stat" id="humAvg">--</div>
+                        <div class="stat-label">Average</div>
+                    </div>
                 </div>
-            {% else %}
-                <div class="sensor-value no-data">
-                    📊 No Data Available
-                </div>
-                <div class="sensor-status">
-                    ⚠️ Waiting for sensor data...
-                </div>
-            {% endif %}
-            
-            <div style="margin-top: 15px; font-size: 12px; color: #6c757d;">
-                <strong>📈 Sensor Info:</strong><br>
-                • Type: DHT22/AM2302<br>
-                • Accuracy: ±0.5°C, ±2-5%RH
             </div>
         </div>
+        {% endif %}
 
         <!-- Recent Readings -->
         {% if recent_sensors %}
         <div style="clear: both; margin-top: 30px;">
-            <h2 style="color: white; text-align: center;">📊 Recent Sensor Readings</h2>
-            <div style="background: rgba(255,255,255,0.95); border-radius: 15px; padding: 20px; margin: 15px;">
-                <table style="width: 100%; border-collapse: collapse;">
+            <h2 style="color: white; text-align: center; margin-bottom: 20px;">
+                📊 Recent Sensor Readings
+                <span style="font-size: 14px; opacity: 0.8;">(Last 10 readings)</span>
+            </h2>
+            <div class="data-table-container">
+                <table class="data-table">
                     <thead>
-                        <tr style="background: #f8f9fa;">
-                            <th style="padding: 10px; border: 1px solid #dee2e6;">🕐 Time</th>
-                            <th style="padding: 10px; border: 1px solid #dee2e6;">🌡️ Temperature</th>
-                            <th style="padding: 10px; border: 1px solid #dee2e6;">💧 Humidity</th>
+                        <tr>
+                            <th>🕐 Time</th>
+                            <th>🌡️ Temperature</th>
+                            <th>💧 Humidity</th>
+                            <th>📱 Device</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for sensor in recent_sensors %}
+                    <tbody id="sensorDataTable">
+                        {% for sensor in recent_sensors|slice:":10" %}
                         <tr>
-                            <td style="padding: 8px; border: 1px solid #dee2e6; text-align: center;">
-                                {{ sensor.get_timestamp_thai }}
-                            </td>
-                            <td style="padding: 8px; border: 1px solid #dee2e6; text-align: center;">
+                            <td>{{ sensor.get_timestamp_thai }}</td>
+                            <td>
                                 {% if sensor.temperature is not None %}
-                                    {{ sensor.get_temperature_display }}
+                                    <span style="color: #ff6b6b; font-weight: bold;">{{ sensor.get_temperature_display }}</span>
                                 {% else %}
-                                    ❌ No Data
+                                    <span style="color: #999;">❌ No Data</span>
                                 {% endif %}
                             </td>
-                            <td style="padding: 8px; border: 1px solid #dee2e6; text-align: center;">
+                            <td>
                                 {% if sensor.humidity is not None %}
-                                    {{ sensor.get_humidity_display }}
+                                    <span style="color: #4ecdc4; font-weight: bold;">{{ sensor.get_humidity_display }}</span>
                                 {% else %}
-                                    ❌ No Data
+                                    <span style="color: #999;">❌ No Data</span>
                                 {% endif %}
                             </td>
+                            <td style="font-size: 12px; color: #666;">{{ sensor.device_name }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
         </div>
+        {% else %}
+        <div style="clear: both; margin-top: 30px;">
+            <div class="data-table-container">
+                <h3 style="text-align: center; color: #666; margin: 40px 0;">
+                    📊 No sensor data available yet
+                </h3>
+                <p style="text-align: center; color: #999; font-size: 14px;">
+                    Waiting for ESP32 to send sensor data via MQTT...
+                </p>
+                <div style="text-align: center; margin: 20px 0;">
+                    <button onclick="generateSampleData()" class="btn btn-info">
+                        🧪 Generate Sample Data for Testing
+                    </button>
+                </div>
+            </div>
+        </div>
         {% endif %}
     </div>
 
     <script>
-        // แสดงเวลาปัจจุบัน
-        function updateTime() {
-            const now = new Date();
-            const timeString = now.toLocaleTimeString('th-TH', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
-            const dateString = now.toLocaleDateString('th-TH');
-            document.getElementById('current-time').innerHTML = 
-                `${dateString} ${timeString}`;
+        // Global variables
+        let temperatureChart = null;
+        let humidityChart = null;
+        let updateInterval = null;
+        
+        // ข้อมูลเริ่มต้นสำหรับกราฟจาก Django
+        const initialSensorData = [
+            {% for sensor in recent_sensors %}
+            {
+                timestamp: '{{ sensor.timestamp|date:"H:i:s" }}',
+                temperature: {% if sensor.temperature is not None %}{{ sensor.temperature }}{% else %}null{% endif %},
+                humidity: {% if sensor.humidity is not None %}{{ sensor.humidity }}{% else %}null{% endif %}
+            }{% if not forloop.last %},{% endif %}
+            {% endfor %}
+        ].reverse(); // เรียงจากเก่าไปใหม่
+        
+        console.log('📊 Initial sensor data:', initialSensorData);
+        
+        // ฟังก์ชันคำนวณสถิติ
+        function calculateStats(data, key) {
+            if (!data || data.length === 0) return { min: 0, max: 0, avg: 0 };
+            
+            const values = data.filter(item => item[key] !== null).map(item => item[key]);
+            if (values.length === 0) return { min: 0, max: 0, avg: 0 };
+            
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            const avg = values.reduce((a, b) => a + b, 0) / values.length;
+            
+            return { min, max, avg };
         }
         
-        // อัพเดทเวลาทันทีและทุกวินาที
-        updateTime();
-        setInterval(updateTime, 1000);
-        
-        // แสดงข้อความต้อนรับเมื่อโหลดหน้าเว็บ
-        console.log('🚀 IoT Dashboard loaded successfully!');
-        console.log('📡 Auto-refresh enabled: Every 2 seconds');
-        
-        // เพิ่มเอฟเฟกต์เมื่อหน้าเว็บโหลด
-        window.addEventListener('load', function() {
-            document.querySelector('.dashboard-container').style.opacity = '0';
-            document.querySelector('.dashboard-container').style.transform = 'translateY(20px)';
-            document.querySelector('.dashboard-container').style.transition = 'all 0.5s ease';
+        // สร้างกราฟ Temperature
+        function createTemperatureChart() {
+            const ctx = document.getElementById('temperatureChart');
+            if (!ctx) {
+                console.error('❌ Temperature chart canvas not found');
+                return null;
+            }
             
-            setTimeout(function() {
-                document.querySelector('.dashboard-container').style.opacity = '1';
-                document.querySelector('.dashboard-container').style.transform = 'translateY(0)';
-            }, 100);
+            console.log('🌡️ Creating temperature chart...');
+            
+            // เตรียมข้อมูล
+            const tempData = initialSensorData.filter(item => item.temperature !== null);
+            const labels = tempData.map(item => item.timestamp);
+            const temperatures = tempData.map(item => item.temperature);
+            
+            console.log('Temperature data:', { labels, temperatures });
+            
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Temperature (°C)',
+                        data: temperatures,
+                        borderColor: '#ff6b6b',
+                        backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#ff6b6b',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: 'white',
+                            bodyColor: 'white',
+                            borderColor: 'rgba(255, 255, 255, 0.3)',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function(context) {
+                                    return `Temperature: ${context.parsed.y}°C`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            },
+                            ticks: {
+                                color: '#666',
+                                maxTicksLimit: 8
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            },
+                            ticks: {
+                                color: '#666'
+                            },
+                            title: {
+                                display: true,
+                                text: 'Temperature (°C)',
+                                color: '#ff6b6b',
+                                font: {
+                                    weight: 'bold'
+                                }
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 750,
+                        easing: 'easeInOutQuart'
+                    }
+                }
+            });
+        }
+        
+        // สร้างกราฟ Humidity
+        function createHumidityChart() {
+            const ctx = document.getElementById('humidityChart');
+            if (!ctx) {
+                console.error('❌ Humidity chart canvas not found');
+                return null;
+            }
+            
+            console.log('💧 Creating humidity chart...');
+            
+            // เตรียมข้อมูล
+            const humData = initialSensorData.filter(item => item.humidity !== null);
+            const labels = humData.map(item => item.timestamp);
+            const humidities = humData.map(item => item.humidity);
+            
+            console.log('Humidity data:', { labels, humidities });
+            
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Humidity (%)',
+                        data: humidities,
+                        borderColor: '#4ecdc4',
+                        backgroundColor: 'rgba(78, 205, 196, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#4ecdc4',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: 'white',
+                            bodyColor: 'white',
+                            borderColor: 'rgba(255, 255, 255, 0.3)',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function(context) {
+                                    return `Humidity: ${context.parsed.y}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            },
+                            ticks: {
+                                color: '#666',
+                                maxTicksLimit: 8
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            },
+                            ticks: {
+                                color: '#666'
+                            },
+                            title: {
+                                display: true,
+                                text: 'Humidity (%)',
+                                color: '#4ecdc4',
+                                font: {
+                                    weight: 'bold'
+                                }
+                            },
+                            min: 0,
+                            max: 100
+                        }
+                    },
+                    animation: {
+                        duration: 750,
+                        easing: 'easeInOutQuart'
+                    }
+                }
+            });
+        }
+        
+        // อัพเดทสถิติ
+        function updateStats(data) {
+            console.log('📊 Updating stats with data:', data);
+            
+            const tempData = data.filter(item => item.temperature !== null);
+            const humData = data.filter(item => item.humidity !== null);
+            
+            const tempStats = calculateStats(tempData, 'temperature');
+            const humStats = calculateStats(humData, 'humidity');
+            
+            console.log('Temperature stats:', tempStats);
+            console.log('Humidity stats:', humStats);
+            
+            // อัพเดท Temperature stats
+            if (tempStats.max > 0) {
+                const tempMaxEl = document.getElementById('tempMax');
+                const tempMinEl = document.getElementById('tempMin');
+                const tempAvgEl = document.getElementById('tempAvg');
+                
+                if (tempMaxEl) tempMaxEl.textContent = tempStats.max.toFixed(1) + '°C';
+                if (tempMinEl) tempMinEl.textContent = tempStats.min.toFixed(1) + '°C';
+                if (tempAvgEl) tempAvgEl.textContent = tempStats.avg.toFixed(1) + '°C';
+            }
+            
+            // อัพเดท Humidity stats
+            if (humStats.max > 0) {
+                const humMaxEl = document.getElementById('humMax');
+                const humMinEl = document.getElementById('humMin');
+                const humAvgEl = document.getElementById('humAvg');
+                
+                if (humMaxEl) humMaxEl.textContent = humStats.max.toFixed(1) + '%';
+                if (humMinEl) humMinEl.textContent = humStats.min.toFixed(1) + '%';
+                if (humAvgEl) humAvgEl.textContent = humStats.avg.toFixed(1) + '%';
+            }
+            
+            // อัพเดทค่าปัจจุบัน
+            const latest = data[data.length - 1];
+            if (latest) {
+                const tempCurrentEl = document.getElementById('tempCurrent');
+                const humCurrentEl = document.getElementById('humCurrent');
+                
+                if (latest.temperature !== null && tempCurrentEl) {
+                    tempCurrentEl.textContent = latest.temperature.toFixed(1) + '°C';
+                }
+                if (latest.humidity !== null && humCurrentEl) {
+                    humCurrentEl.textContent = latest.humidity.toFixed(1) + '%';
+                }
+            }
+        }
+        
+        // แสดง update indicator
+        function showUpdateIndicator(elementId) {
+            const indicator = document.getElementById(elementId);
+            if (indicator) {
+                indicator.classList.add('active');
+                setTimeout(() => {
+                    indicator.classList.remove('active');
+                }, 2000);
+            }
+        }
+        
+        // สร้างข้อมูลตัวอย่างสำหรับทดสอบ
+        function generateSampleData() {
+            if (confirm('This will generate sample sensor data for testing. Continue?')) {
+                // ส่งคำขอไปยัง backend เพื่อสร้างข้อมูลตัวอย่าง
+                fetch('/api/generate-sample-data/', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(result => {
+                        if (result.success) {
+                            alert('Sample data generated successfully! Refreshing page...');
+                            location.reload();
+                        } else {
+                            alert('Error generating sample data: ' + result.error);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Error generating sample data');
+                    });
+            }
+        }
+        
+        // อัพเดทข้อมูลแบบ real-time
+        async function updateRealTimeData() {
+            try {
+                console.log('🔄 Updating real-time data...');
+                
+                const response = await fetch('/api/chart-data/');
+                const result = await response.json();
+                
+                if (result.success && result.chart_data) {
+                    console.log('📡 Received new data:', result.chart_data.labels.length, 'points');
+                    
+                    // เตรียมข้อมูลใหม่
+                    const newData = result.chart_data.labels.map((label, index) => ({
+                        timestamp: label,
+                        temperature: result.chart_data.temperature[index],
+                        humidity: result.chart_data.humidity[index]
+                    }));
+                    
+                    // อัพเดทกราฟ Temperature
+                    if (temperatureChart && newData.length > 0) {
+                        const tempData = newData.filter(item => item.temperature !== null);
+                        const tempLabels = tempData.map(item => item.timestamp);
+                        const tempValues = tempData.map(item => item.temperature);
+                        
+                        temperatureChart.data.labels = tempLabels;
+                        temperatureChart.data.datasets[0].data = tempValues;
+                        temperatureChart.update('none');
+                        
+                        showUpdateIndicator('tempUpdateIndicator');
+                        console.log('🌡️ Temperature chart updated');
+                    }
+                    
+                    // อัพเดทกราฟ Humidity
+                    if (humidityChart && newData.length > 0) {
+                        const humData = newData.filter(item => item.humidity !== null);
+                        const humLabels = humData.map(item => item.timestamp);
+                        const humValues = humData.map(item => item.humidity);
+                        
+                        humidityChart.data.labels = humLabels;
+                        humidityChart.data.datasets[0].data = humValues;
+                        humidityChart.update('none');
+                        
+                        showUpdateIndicator('humUpdateIndicator');
+                        console.log('💧 Humidity chart updated');
+                    }
+                    
+                    // อัพเดทสถิติ
+                    updateStats(newData);
+                    
+                    // แสดงข้อมูลล่าสุด
+                    if (result.latest) {
+                        const lastUpdateEl = document.getElementById('last-update');
+                        if (lastUpdateEl) {
+                            const now = new Date();
+                            const thaiTime = new Intl.DateTimeFormat('th-TH', {
+                                timeZone: 'Asia/Bangkok',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false
+                            }).format(now);
+                            lastUpdateEl.textContent = `อัพเดทล่าสุด: ${thaiTime}`;
+                        }
+                    }
+                    
+                    console.log('✅ Real-time update completed');
+                    
+                } else {
+                    console.warn('⚠️ No new data received');
+                }
+            } catch (error) {
+                console.error('❌ Error updating real-time data:', error);
+            }
+        }
+
+        // Initialize charts และ real-time updates
+        function initializeDashboard() {
+            console.log('🚀 Initializing dashboard...');
+            
+            // ตรวจสอบว่า Chart.js โหลดแล้ว
+            if (typeof Chart === 'undefined') {
+                console.error('❌ Chart.js not loaded');
+                alert('Chart.js library failed to load. Please check your internet connection.');
+                return;
+            }
+            
+            console.log('✅ Chart.js loaded successfully');
+            
+            // สร้างกราฟ
+            try {
+                temperatureChart = createTemperatureChart();
+                if (temperatureChart) {
+                    console.log('✅ Temperature chart created');
+                } else {
+                    console.error('❌ Failed to create temperature chart');
+                }
+                
+                humidityChart = createHumidityChart();
+                if (humidityChart) {
+                    console.log('✅ Humidity chart created');
+                } else {
+                    console.error('❌ Failed to create humidity chart');
+                }
+                
+                // อัพเดทสถิติเริ่มต้น
+                updateStats(initialSensorData);
+                
+                // เริ่ม real-time updates ทุก 5 วินาที
+                console.log('📡 Starting real-time updates every 5 seconds...');
+                updateInterval = setInterval(updateRealTimeData, 5000);
+                
+                // อัพเดทครั้งแรกหลังจาก 2 วินาที
+                setTimeout(updateRealTimeData, 2000);
+                
+                console.log('🚀 Dashboard initialized with', initialSensorData.length, 'data points');
+                
+            } catch (error) {
+                console.error('❌ Error initializing charts:', error);
+            }
+        }
+        
+        // แสดงเวลาปัจจุบัน (เวลาไทย)
+        function updateTime() {
+            const now = new Date();
+            
+            // แปลงเป็นเวลาไทย
+            const options = {
+                timeZone: 'Asia/Bangkok',
+                year: 'numeric',
+                month: '2-digit', 
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            };
+            
+            const thaiTime = new Intl.DateTimeFormat('th-TH', options).format(now);
+            const timeElement = document.getElementById('current-time');
+            
+            if (timeElement) {
+                timeElement.innerHTML = `${thaiTime} (เวลาไทย)`;
+            }
+            
+            // Debug - แสดงเวลาใน console
+            console.log('🕐 Current Thai time:', thaiTime);
+        }
+        
+        // Manual refresh function
+        function refreshNow() {
+            console.log('🔄 Manual refresh triggered');
+            const refreshBtn = document.querySelector('.manual-refresh-btn');
+            
+            // เพิ่มเอฟเฟกต์ loading
+            if (refreshBtn) {
+                refreshBtn.innerHTML = '⏳ Loading...';
+                refreshBtn.disabled = true;
+            }
+            
+            // เรียก update function
+            updateRealTimeData().then(() => {
+                // รีเซ็ต button หลังจาก 1 วินาที
+                setTimeout(() => {
+                    if (refreshBtn) {
+                        refreshBtn.innerHTML = '🔄 Refresh';
+                        refreshBtn.disabled = false;
+                    }
+                }, 1000);
+            });
+        }
+
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('📄 DOM Content Loaded');
+            
+            // รอให้ Chart.js โหลดเสร็จ
+            if (typeof Chart !== 'undefined') {
+                initializeDashboard();
+            } else {
+                // รอ Chart.js โหลด
+                let attempts = 0;
+                const checkChart = setInterval(() => {
+                    attempts++;
+                    if (typeof Chart !== 'undefined') {
+                        clearInterval(checkChart);
+                        initializeDashboard();
+                    } else if (attempts > 20) { // รอ 10 วินาที
+                        clearInterval(checkChart);
+                        console.error('❌ Chart.js failed to load after 10 seconds');
+                        alert('Failed to load Chart.js library. Please refresh the page.');
+                    }
+                }, 500);
+            }
+            
+            // อัพเดทเวลาทันทีและทุกวินาที
+            updateTime();
+            setInterval(updateTime, 1000);
+            
+            // เพิ่มเอฟเฟกต์เมื่อหน้าเว็บโหลด
+            const container = document.querySelector('.dashboard-container');
+            if (container) {
+                container.style.opacity = '0';
+                container.style.transform = 'translateY(20px)';
+                container.style.transition = 'all 0.5s ease';
+                
+                setTimeout(function() {
+                    container.style.opacity = '1';
+                    container.style.transform = 'translateY(0)';
+                }, 100);
+            }
         });
+        
+        // Responsive chart handling
+        window.addEventListener('resize', function() {
+            if (temperatureChart) {
+                temperatureChart.resize();
+                console.log('🔄 Temperature chart resized');
+            }
+            if (humidityChart) {
+                humidityChart.resize();
+                console.log('🔄 Humidity chart resized');
+            }
+        });
+        
+        // Cleanup เมื่อออกจากหน้า
+        window.addEventListener('beforeunload', function() {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+        });
+        
+        // เปิด console logs เพื่อ debug
+        console.log('📊 Chart script loaded');
+        console.log('🔧 Debug mode enabled');
     </script>
 </body>
 </html>
