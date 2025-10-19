@@ -6,7 +6,7 @@ from django.utils import timezone
 import json
 import logging
 from .models import Device, SensorData, Relay
-from .mqtt_manager import get_mqtt_manager, send_led_command
+from .mqtt_manager import get_mqtt_manager, send_led_command, send_relay_command
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -122,31 +122,27 @@ def control_relay(request):
             # กำหนดคำสั่งและสถานะใหม่
             if action == 'on':
                 new_state = True
-                command = f'RELAY{relay_num}_ON'
+                mqtt_command = 'ON'
                 success_msg = f'🟢 ส่งคำสั่งเปิด {relay_name} สำเร็จ!'
                 
             elif action == 'off':
                 new_state = False
-                command = f'RELAY{relay_num}_OFF'
+                mqtt_command = 'OFF'
                 success_msg = f'🔴 ส่งคำสั่งปิด {relay_name} สำเร็จ!'
                 
             elif action == 'toggle':
                 new_state = not current_status
-                command = f'RELAY{relay_num}_{"ON" if new_state else "OFF"}'
+                mqtt_command = 'ON' if new_state else 'OFF'
                 success_msg = f'🔄 ส่งคำสั่ง Toggle {relay_name} เป็น {"เปิด" if new_state else "ปิด"}!'
             else:
                 messages.error(request, '❌ คำสั่งไม่ถูกต้อง')
                 return redirect('dashboard_simple')
             
             # ส่งคำสั่งผ่าน MQTT Manager
-            logger.info(f"🎮 Sending RELAY command: {command}")
+            logger.info(f"🎮 Sending RELAY {relay_num} command: {mqtt_command}")
             
-            # ใช้ MQTT manager โดยตรง
-            mqtt_manager = get_mqtt_manager()
-            mqtt_topic = f'thaitechzone/v2_board/control/relay{relay_num}'
-            mqtt_payload = 'ON' if new_state else 'OFF'
-            
-            success = mqtt_manager.publish(mqtt_topic, mqtt_payload)
+            # ใช้ฟังก์ชัน send_relay_command
+            success, result_msg = send_relay_command(int(relay_num), mqtt_command)
             
             if success:
                 # อัพเดทสถานะใน database
@@ -161,10 +157,10 @@ def control_relay(request):
                 relay_controller.save()
                 
                 messages.success(request, success_msg)
-                logger.info(f"✅ RELAY command successful: {command}")
+                logger.info(f"✅ RELAY command successful: {mqtt_command} to RELAY {relay_num}")
             else:
-                messages.error(request, f'❌ ส่งคำสั่งไม่สำเร็จ')
-                logger.error(f"❌ RELAY command failed")
+                messages.error(request, f'❌ ส่งคำสั่งไม่สำเร็จ: {result_msg}')
+                logger.error(f"❌ RELAY command failed: {result_msg}")
                 
         except Exception as e:
             messages.error(request, f'❌ เกิดข้อผิดพลาด: {str(e)}')

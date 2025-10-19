@@ -43,8 +43,22 @@ class MQTTManager:
         # การตั้งค่า MQTT
         self.MQTT_BROKER = "broker.hivemq.com"
         self.MQTT_PORT = 1883
+        
+        # LED Topics
         self.LED_CONTROL_TOPIC = "thaitechzone/v2_board/control/led"
         self.LED_STATUS_TOPIC = "thaitechzone/v2_board/status/led"
+        
+        # RELAY Control Topics (Dashboard → ESP32)
+        self.RELAY1_CONTROL_TOPIC = "thaitechzone/v2_board/control/relay1"
+        self.RELAY2_CONTROL_TOPIC = "thaitechzone/v2_board/control/relay2"
+        self.RELAY3_CONTROL_TOPIC = "thaitechzone/v2_board/control/relay3"
+        
+        # RELAY State Topics (ESP32 → Dashboard)
+        self.RELAY1_STATE_TOPIC = "thaitechzone/v2_board/state/relay1"
+        self.RELAY2_STATE_TOPIC = "thaitechzone/v2_board/state/relay2"
+        self.RELAY3_STATE_TOPIC = "thaitechzone/v2_board/state/relay3"
+        
+        # Sensor Data Topic
         self.SENSOR_DATA_TOPIC = "thaitechzone/v2_board/sensor/data"
         
         # สถานะการเชื่อมต่อ
@@ -152,7 +166,11 @@ class MQTTManager:
         """Subscribe to MQTT topics"""
         topics = [
             (self.LED_STATUS_TOPIC, 1),
-            (self.SENSOR_DATA_TOPIC, 1)
+            (self.SENSOR_DATA_TOPIC, 1),
+            # Subscribe to RELAY state topics (รับสถานะจาก ESP32)
+            (self.RELAY1_STATE_TOPIC, 1),
+            (self.RELAY2_STATE_TOPIC, 1),
+            (self.RELAY3_STATE_TOPIC, 1)
         ]
         
         for topic, qos in topics:
@@ -326,6 +344,37 @@ class MQTTManager:
         """
         return self.send_message(self.LED_CONTROL_TOPIC, command)
     
+    def send_relay_command(self, relay_num, command):
+        """
+        ส่งคำสั่งควบคุม RELAY
+        
+        Args:
+            relay_num (int): หมายเลข RELAY (1, 2, 3)
+            command (str): คำสั่ง (ON/OFF)
+            
+        Returns:
+            bool: True ถ้าส่งสำเร็จ
+        """
+        topic_map = {
+            1: self.RELAY1_CONTROL_TOPIC,
+            2: self.RELAY2_CONTROL_TOPIC,
+            3: self.RELAY3_CONTROL_TOPIC
+        }
+        
+        if relay_num not in topic_map:
+            logger.error(f"❌ Invalid relay number: {relay_num}")
+            return False
+        
+        topic = topic_map[relay_num]
+        success = self.send_message(topic, command)
+        
+        if success:
+            logger.info(f"🔌 RELAY {relay_num} command '{command}' sent to {topic}")
+        else:
+            logger.error(f"❌ Failed to send RELAY {relay_num} command")
+        
+        return success
+    
     def register_message_callback(self, topic, callback):
         """
         ลงทะเบียน callback สำหรับ topic ที่กำหนด
@@ -365,6 +414,12 @@ class MQTTManager:
             'topics': {
                 'led_control': self.LED_CONTROL_TOPIC,
                 'led_status': self.LED_STATUS_TOPIC,
+                'relay1_control': self.RELAY1_CONTROL_TOPIC,
+                'relay2_control': self.RELAY2_CONTROL_TOPIC,
+                'relay3_control': self.RELAY3_CONTROL_TOPIC,
+                'relay1_state': self.RELAY1_STATE_TOPIC,
+                'relay2_state': self.RELAY2_STATE_TOPIC,
+                'relay3_state': self.RELAY3_STATE_TOPIC,
                 'sensor_data': self.SENSOR_DATA_TOPIC
             }
         }
@@ -411,4 +466,28 @@ def send_led_command(command):
             
     except Exception as e:
         logger.error(f"❌ Error in send_led_command: {e}")
+        return False, f"Error: {e}"
+
+def send_relay_command(relay_num, command):
+    """
+    ส่งคำสั่งควบคุม RELAY ผ่าน MQTT Manager
+    
+    Args:
+        relay_num (int): หมายเลข RELAY (1, 2, 3)
+        command (str): คำสั่ง (ON/OFF)
+        
+    Returns:
+        tuple: (success, message)
+    """
+    try:
+        manager = get_mqtt_manager()
+        success = manager.send_relay_command(relay_num, command)
+        
+        if success:
+            return True, f"RELAY {relay_num} command '{command}' sent successfully"
+        else:
+            return False, f"Failed to send RELAY {relay_num} command '{command}'"
+            
+    except Exception as e:
+        logger.error(f"❌ Error in send_relay_command: {e}")
         return False, f"Error: {e}"
