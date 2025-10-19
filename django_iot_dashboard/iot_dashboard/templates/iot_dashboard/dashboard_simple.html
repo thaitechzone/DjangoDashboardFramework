@@ -115,6 +115,117 @@
             padding: 25px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
         }
+
+        .relay-control {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .relay-item {
+            margin-bottom: 15px;
+        }
+
+        .relay-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .btn-sm {
+            padding: 8px 12px !important;
+            font-size: 14px !important;
+            min-width: 60px;
+        }
+
+        .btn-info {
+            background: #3498db;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background: #2980b9;
+        }
+
+        /* Horizontal RELAY Section Styles */
+        .relay-section-horizontal {
+            margin: 30px 0;
+            width: 100%;
+        }
+
+        .relay-control-horizontal {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .relay-horizontal-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 25px;
+            margin-top: 20px;
+        }
+
+        .relay-item-horizontal {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            border: 2px solid #dee2e6;
+            transition: all 0.3s ease;
+        }
+
+        .relay-item-horizontal:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .relay-header-horizontal {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        .control-buttons-horizontal {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .control-buttons-horizontal form {
+            width: 100%;
+        }
+
+        .control-buttons-horizontal button {
+            width: 100%;
+            padding: 10px 15px;
+            font-size: 14px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        /* Responsive Design for Horizontal RELAY */
+        @media (max-width: 992px) {
+            .relay-horizontal-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .relay-horizontal-container {
+                grid-template-columns: 1fr;
+            }
+        }
         
         .control-buttons {
             display: flex;
@@ -327,6 +438,118 @@
                             ⚫ Turn OFF
                         </button>
                     </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- RELAY Controller Section (Full Width Horizontal) -->
+        <div class="relay-section-horizontal">
+            <div class="relay-control-horizontal">
+                <h2 style="text-align: center; margin-bottom: 20px;">⚡ RELAY Controller</h2>
+                
+                <div class="relay-horizontal-container">
+                    <!-- RELAY 1 -->
+                    <div class="relay-item-horizontal">
+                        <div class="relay-header-horizontal">
+                            <span style="font-weight: bold; font-size: 16px;">🔌 RELAY 1</span>
+                            <span class="status-indicator {% if relay.relay1_status %}status-on{% else %}status-off{% endif %}" style="font-size: 14px;">
+                                {% if relay.relay1_status %}🟢 ON{% else %}⚫ OFF{% endif %}
+                            </span>
+                        </div>
+                        <div class="control-buttons-horizontal">
+                            <form method="post" action="{% url 'control_relay' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="relay_num" value="1">
+                                <button type="submit" name="action" value="on" class="btn btn-success btn-sm">
+                                    🟢 ON
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'control_relay' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="relay_num" value="1">
+                                <button type="submit" name="action" value="off" class="btn btn-danger btn-sm">
+                                    ⚫ OFF
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'control_relay' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="relay_num" value="1">
+                                <button type="submit" name="action" value="toggle" class="btn btn-info btn-sm">
+                                    🔄 Toggle
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- RELAY 2 -->
+                    <div class="relay-item-horizontal">
+                        <div class="relay-header-horizontal">
+                            <span style="font-weight: bold; font-size: 16px;">🔌 RELAY 2</span>
+                            <span class="status-indicator {% if relay.relay2_status %}status-on{% else %}status-off{% endif %}" style="font-size: 14px;">
+                                {% if relay.relay2_status %}🟢 ON{% else %}⚫ OFF{% endif %}
+                            </span>
+                        </div>
+                        <div class="control-buttons-horizontal">
+                            <form method="post" action="{% url 'control_relay' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="relay_num" value="2">
+                                <button type="submit" name="action" value="on" class="btn btn-success btn-sm">
+                                    🟢 ON
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'control_relay' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="relay_num" value="2">
+                                <button type="submit" name="action" value="off" class="btn btn-danger btn-sm">
+                                    ⚫ OFF
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'control_relay' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="relay_num" value="2">
+                                <button type="submit" name="action" value="toggle" class="btn btn-info btn-sm">
+                                    🔄 Toggle
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- RELAY 3 -->
+                    <div class="relay-item-horizontal">
+                        <div class="relay-header-horizontal">
+                            <span style="font-weight: bold; font-size: 16px;">🔌 RELAY 3</span>
+                            <span class="status-indicator {% if relay.relay3_status %}status-on{% else %}status-off{% endif %}" style="font-size: 14px;">
+                                {% if relay.relay3_status %}🟢 ON{% else %}⚫ OFF{% endif %}
+                            </span>
+                        </div>
+                        <div class="control-buttons-horizontal">
+                            <form method="post" action="{% url 'control_relay' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="relay_num" value="3">
+                                <button type="submit" name="action" value="on" class="btn btn-success btn-sm">
+                                    🟢 ON
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'control_relay' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="relay_num" value="3">
+                                <button type="submit" name="action" value="off" class="btn btn-danger btn-sm">
+                                    ⚫ OFF
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'control_relay' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="relay_num" value="3">
+                                <button type="submit" name="action" value="toggle" class="btn btn-info btn-sm">
+                                    🔄 Toggle
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 15px; text-align: center; font-size: 12px; color: #999;">
+                    📡 MQTT Topics: thaitechzone/v2_board/control/relay[1,2,3] | Payload: ON/OFF
                 </div>
             </div>
         </div>

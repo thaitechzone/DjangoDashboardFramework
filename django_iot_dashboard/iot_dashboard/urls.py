@@ -21,8 +21,12 @@ urlpatterns = [
     # LED Control
     path('control-led/', views_simple.control_led, name='control_led'),
     
+    # Relay Control
+    path('control-relay/', views_simple.control_relay, name='control_relay'),
+    
     # API Endpoints
     path('api/control-led/', views.api_control_led, name='api_control_led'),
+    path('api/control-relay/', views.api_control_relay, name='api_control_relay'),
     path('api/sensor-data/', views_simple.api_sensor_data, name='api_sensor_data'),
     path('api/chart-data/', views_simple.api_chart_data, name='api_chart_data'),
     path('api/mqtt-status/', views.api_mqtt_status, name='api_mqtt_status'),

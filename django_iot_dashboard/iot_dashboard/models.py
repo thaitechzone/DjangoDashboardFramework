@@ -20,6 +20,38 @@ class Device(models.Model):
         return "ไม่มีข้อมูล"
 
 
+class Relay(models.Model):
+    """Model สำหรับควบคุม RELAY 3 ตัว"""
+    name = models.CharField(max_length=100, default="Relay Control")
+    relay1_status = models.BooleanField(default=False, verbose_name="RELAY 1")
+    relay2_status = models.BooleanField(default=False, verbose_name="RELAY 2")
+    relay3_status = models.BooleanField(default=False, verbose_name="RELAY 3")
+    last_updated = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(default=timezone.now)
+    
+    class Meta:
+        verbose_name = "Relay Controller"
+        verbose_name_plural = "Relay Controllers"
+    
+    def __str__(self):
+        return f"{self.name} - R1:{'ON' if self.relay1_status else 'OFF'} R2:{'ON' if self.relay2_status else 'OFF'} R3:{'ON' if self.relay3_status else 'OFF'}"
+    
+    def get_relay1_display(self):
+        return "🟢 ON" if self.relay1_status else "⚫ OFF"
+    
+    def get_relay2_display(self):
+        return "🟢 ON" if self.relay2_status else "⚫ OFF"
+    
+    def get_relay3_display(self):
+        return "🟢 ON" if self.relay3_status else "⚫ OFF"
+    
+    def get_last_updated_thai(self):
+        """แสดงเวลาอัพเดทล่าสุดในรูปแบบภาษาไทย"""
+        if self.last_updated:
+            return self.last_updated.strftime("%d/%m/%Y %H:%M:%S")
+        return "ไม่มีข้อมูล"
+
+
 class SensorData(models.Model):
     device_name = models.CharField(max_length=100, default="ESP32_DHT22")
     temperature = models.FloatField(null=True, blank=True)

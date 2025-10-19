@@ -7,7 +7,7 @@ from datetime import datetime
 import pytz
 import json
 import logging
-from .models import Device, SensorData
+from .models import Device, SensorData, Relay
 from .mqtt_manager import get_mqtt_manager, send_led_command
 
 # Setup logging
@@ -50,6 +50,16 @@ def dashboard_view(request):
     """แสดงหน้า Dashboard หลัก"""
     # Get the LED device object. Use get_or_create to avoid errors on first run.
     led_device, created = Device.objects.get_or_create(name="Onboard LED")
+    
+    # Get or create Relay controller
+    relay_controller, created = Relay.objects.get_or_create(
+        name="ESP32 Relay Controller",
+        defaults={
+            'relay1_status': False,
+            'relay2_status': False,
+            'relay3_status': False
+        }
+    )
     
     # Get latest sensor data
     latest_sensor = SensorData.objects.order_by('-timestamp').first()
@@ -99,6 +109,7 @@ def dashboard_view(request):
     
     context = {
         'led': led_device,
+        'relay': relay_controller,
         'latest_sensor': latest_sensor,
         'recent_sensors': recent_sensors,  # Send original model objects
         'sensor_stats': sensor_stats,
@@ -158,6 +169,92 @@ def control_led(request):
     
     return redirect('dashboard')
 
+def control_relay(request):
+    """ควบคุม RELAY 1, 2, 3 ผ่าน MQTT Manager"""
+    if request.method == 'POST':
+        relay_num = request.POST.get('relay_num')  # '1', '2', '3'
+        action = request.POST.get('action')  # 'on', 'off', 'toggle'
+        
+        relay_controller, created = Relay.objects.get_or_create(
+            name="ESP32 Relay Controller",
+            defaults={
+                'relay1_status': False,
+                'relay2_status': False,
+                'relay3_status': False
+            }
+        )
+        
+        try:
+            # กำหนดสถานะปัจจุบันของ relay
+            if relay_num == '1':
+                current_status = relay_controller.relay1_status
+                relay_name = "RELAY 1"
+            elif relay_num == '2':
+                current_status = relay_controller.relay2_status
+                relay_name = "RELAY 2"
+            elif relay_num == '3':
+                current_status = relay_controller.relay3_status
+                relay_name = "RELAY 3"
+            else:
+                messages.error(request, '❌ หมายเลข Relay ไม่ถูกต้อง')
+                return redirect('dashboard')
+            
+            # กำหนดคำสั่งและสถานะใหม่
+            if action == 'on':
+                new_state = True
+                command = f'RELAY{relay_num}_ON'
+                success_msg = f'🟢 ส่งคำสั่งเปิด {relay_name} สำเร็จ!'
+                
+            elif action == 'off':
+                new_state = False
+                command = f'RELAY{relay_num}_OFF'
+                success_msg = f'🔴 ส่งคำสั่งปิด {relay_name} สำเร็จ!'
+                
+            elif action == 'toggle':
+                new_state = not current_status
+                command = f'RELAY{relay_num}_{"ON" if new_state else "OFF"}'
+                success_msg = f'🔄 ส่งคำสั่ง Toggle {relay_name} เป็น {"เปิด" if new_state else "ปิด"}!'
+            else:
+                messages.error(request, '❌ คำสั่งไม่ถูกต้อง')
+                return redirect('dashboard')
+            
+            # ส่งคำสั่งผ่าน MQTT Manager
+            logger.info(f"🎮 Sending RELAY command: {command}")
+            
+            # TODO: ใช้ฟังก์ชัน send_relay_command() เมื่อมีการเพิ่มใน mqtt_manager
+            # success, result_msg = send_relay_command(relay_num, command)
+            
+            # ตอนนี้ใช้ MQTT manager โดยตรง
+            mqtt_manager = get_mqtt_manager()
+            mqtt_topic = f'thaitechzone/v2_board/control/relay{relay_num}'
+            mqtt_payload = 'ON' if new_state else 'OFF'
+            
+            success = mqtt_manager.publish(mqtt_topic, mqtt_payload)
+            
+            if success:
+                # อัพเดทสถานะใน database
+                if relay_num == '1':
+                    relay_controller.relay1_status = new_state
+                elif relay_num == '2':
+                    relay_controller.relay2_status = new_state
+                elif relay_num == '3':
+                    relay_controller.relay3_status = new_state
+                
+                relay_controller.last_updated = timezone.now()
+                relay_controller.save()
+                
+                messages.success(request, success_msg)
+                logger.info(f"✅ RELAY command successful: {command}")
+            else:
+                messages.error(request, f'❌ ส่งคำสั่งไม่สำเร็จ')
+                logger.error(f"❌ RELAY command failed")
+                
+        except Exception as e:
+            messages.error(request, f'❌ เกิดข้อผิดพลาด: {str(e)}')
+            logger.error(f"❌ Error in control_relay: {e}")
+    
+    return redirect('dashboard')
+
 @csrf_exempt
 def api_control_led(request):
     """API สำหรับควบคุม LED (สำหรับ AJAX calls)"""
@@ -204,6 +301,92 @@ def api_control_led(request):
                 return JsonResponse({
                     'success': False,
                     'error': result_msg
+                })
+            
+        except Exception as e:
+            logger.error(f"❌ API Error: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            })
+    
+    return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+@csrf_exempt
+def api_control_relay(request):
+    """API สำหรับควบคุม RELAY (สำหรับ AJAX calls)"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            relay_num = data.get('relay_num')  # '1', '2', '3'
+            action = data.get('action')  # 'on', 'off', 'toggle'
+            
+            relay_controller, created = Relay.objects.get_or_create(
+                name="ESP32 Relay Controller",
+                defaults={
+                    'relay1_status': False,
+                    'relay2_status': False,
+                    'relay3_status': False
+                }
+            )
+            
+            # กำหนดสถานะปัจจุบันของ relay
+            if relay_num == '1':
+                current_status = relay_controller.relay1_status
+            elif relay_num == '2':
+                current_status = relay_controller.relay2_status
+            elif relay_num == '3':
+                current_status = relay_controller.relay3_status
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Invalid relay number'
+                })
+            
+            # กำหนดคำสั่งและสถานะใหม่
+            if action == 'on':
+                new_state = True
+            elif action == 'off':
+                new_state = False
+            elif action == 'toggle':
+                new_state = not current_status
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Invalid action'
+                })
+            
+            # ส่งคำสั่ง MQTT
+            mqtt_manager = get_mqtt_manager()
+            mqtt_topic = f'thaitechzone/v2_board/control/relay{relay_num}'
+            mqtt_payload = 'ON' if new_state else 'OFF'
+            
+            logger.info(f"🎮 API Sending RELAY{relay_num} command: {mqtt_payload}")
+            success = mqtt_manager.publish(mqtt_topic, mqtt_payload)
+            
+            if success:
+                # อัพเดทสถานะใน database
+                if relay_num == '1':
+                    relay_controller.relay1_status = new_state
+                elif relay_num == '2':
+                    relay_controller.relay2_status = new_state
+                elif relay_num == '3':
+                    relay_controller.relay3_status = new_state
+                
+                relay_controller.last_updated = timezone.now()
+                relay_controller.save()
+                
+                return JsonResponse({
+                    'success': True,
+                    'relay_num': relay_num,
+                    'status': new_state,
+                    'message': f'RELAY {relay_num} is now {"ON" if new_state else "OFF"}',
+                    'command_sent': mqtt_payload
+                })
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Failed to send MQTT command'
                 })
             
         except Exception as e:

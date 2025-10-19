@@ -187,6 +187,30 @@
         .chart-update-indicator.active {
             opacity: 1;
         }
+
+        /* Relay Control Styles */
+        .relay-control-item {
+            margin-bottom: 15px;
+        }
+
+        .relay-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .btn-sm {
+            padding: 8px 15px;
+            font-size: 13px;
+            min-width: 60px;
+        }
+
+        .relay-control-item .control-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
     </style>
     </style>
 </head>
@@ -275,6 +299,142 @@
                 <div class="last-updated">
                     <strong>Last Updated:</strong> {{ led.last_updated|thai_time_format:"%d/%m/%Y %H:%M:%S" }}<br>
                     <strong>Auto-refresh:</strong> Every 5 seconds
+                </div>
+            </div>
+
+            <!-- RELAY Control Card -->
+            <div class="device">
+                <h2>⚡ RELAY Controller</h2>
+                
+                <!-- RELAY 1 Control -->
+                <div class="relay-control-item">
+                    <div class="relay-header">
+                        <h3 style="margin: 0; font-size: 1.1em;">🔌 RELAY 1</h3>
+                        <div class="status-indicator">
+                            <span class="led-indicator {% if relay.relay1_status %}led-on{% else %}led-off{% endif %}"></span>
+                            {% if relay.relay1_status %}
+                                <span class="status-on">🟢 ON</span>
+                            {% else %}
+                                <span class="status-off">⚫ OFF</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="control-buttons" style="margin-top: 10px;">
+                        <form method="post" action="{% url 'control_relay' %}" style="display: inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="relay_num" value="1">
+                            <button type="submit" name="action" value="on" class="btn btn-success btn-sm">
+                                🟢 ON
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'control_relay' %}" style="display: inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="relay_num" value="1">
+                            <button type="submit" name="action" value="off" class="btn btn-danger btn-sm">
+                                ⚫ OFF
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'control_relay' %}" style="display: inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="relay_num" value="1">
+                            <button type="submit" name="action" value="toggle" class="btn btn-info btn-sm">
+                                🔄
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <hr style="margin: 15px 0; border: 1px solid #e9ecef;">
+
+                <!-- RELAY 2 Control -->
+                <div class="relay-control-item">
+                    <div class="relay-header">
+                        <h3 style="margin: 0; font-size: 1.1em;">🔌 RELAY 2</h3>
+                        <div class="status-indicator">
+                            <span class="led-indicator {% if relay.relay2_status %}led-on{% else %}led-off{% endif %}"></span>
+                            {% if relay.relay2_status %}
+                                <span class="status-on">🟢 ON</span>
+                            {% else %}
+                                <span class="status-off">⚫ OFF</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="control-buttons" style="margin-top: 10px;">
+                        <form method="post" action="{% url 'control_relay' %}" style="display: inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="relay_num" value="2">
+                            <button type="submit" name="action" value="on" class="btn btn-success btn-sm">
+                                🟢 ON
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'control_relay' %}" style="display: inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="relay_num" value="2">
+                            <button type="submit" name="action" value="off" class="btn btn-danger btn-sm">
+                                ⚫ OFF
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'control_relay' %}" style="display: inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="relay_num" value="2">
+                            <button type="submit" name="action" value="toggle" class="btn btn-info btn-sm">
+                                🔄
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <hr style="margin: 15px 0; border: 1px solid #e9ecef;">
+
+                <!-- RELAY 3 Control -->
+                <div class="relay-control-item">
+                    <div class="relay-header">
+                        <h3 style="margin: 0; font-size: 1.1em;">🔌 RELAY 3</h3>
+                        <div class="status-indicator">
+                            <span class="led-indicator {% if relay.relay3_status %}led-on{% else %}led-off{% endif %}"></span>
+                            {% if relay.relay3_status %}
+                                <span class="status-on">🟢 ON</span>
+                            {% else %}
+                                <span class="status-off">⚫ OFF</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="control-buttons" style="margin-top: 10px;">
+                        <form method="post" action="{% url 'control_relay' %}" style="display: inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="relay_num" value="3">
+                            <button type="submit" name="action" value="on" class="btn btn-success btn-sm">
+                                🟢 ON
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'control_relay' %}" style="display: inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="relay_num" value="3">
+                            <button type="submit" name="action" value="off" class="btn btn-danger btn-sm">
+                                ⚫ OFF
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'control_relay' %}" style="display: inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="relay_num" value="3">
+                            <button type="submit" name="action" value="toggle" class="btn btn-info btn-sm">
+                                🔄
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- MQTT Info -->
+                <div style="margin-top: 15px; font-size: 12px; color: #6c757d;">
+                    <strong>📡 MQTT Topics:</strong><br>
+                    • RELAY 1: <code>thaitechzone/v2_board/control/relay1</code><br>
+                    • RELAY 2: <code>thaitechzone/v2_board/control/relay2</code><br>
+                    • RELAY 3: <code>thaitechzone/v2_board/control/relay3</code>
+                </div>
+                
+                <div class="last-updated">
+                    <strong>Last Updated:</strong> {{ relay.last_updated|thai_time_format:"%d/%m/%Y %H:%M:%S" }}<br>
+                    <strong>Status:</strong> {{ relay }}
                 </div>
             </div>
 
