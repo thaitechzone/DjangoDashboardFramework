@@ -1,7 +1,8 @@
 import paho.mqtt.client as mqtt
+import json
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from iot_dashboard.models import Device
+from iot_dashboard.models import Device, SensorData
 
 # --- Configuration ---
 MQTT_BROKER = "broker.hivemq.com"
@@ -9,6 +10,7 @@ MQTT_PORT = 1883
 LED_STATUS_TOPIC = "thaitechzone/v2_board/state/led"  # ESP32 ส่งสถานะมา
 LED_CONTROL_TOPIC = "thaitechzone/v2_board/control/led"  # เราส่งคำสั่งไป
 LED_FEEDBACK_TOPIC = "thaitechzone/v2_board/feedback/led"  # ESP32 ตอบกลับ
+SENSOR_DATA_TOPIC = "thaitechzone/v2_board/sensors/data"  # ESP32 ส่งข้อมูล sensor
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -16,19 +18,39 @@ def on_connect(client, userdata, flags, rc):
         # Subscribe to multiple topics
         client.subscribe(LED_STATUS_TOPIC, qos=1)
         client.subscribe(LED_FEEDBACK_TOPIC, qos=1)
+        client.subscribe(SENSOR_DATA_TOPIC, qos=1)
         print(f"📡 Subscribed to topics:")
         print(f"   • {LED_STATUS_TOPIC}")
         print(f"   • {LED_FEEDBACK_TOPIC}")
+        print(f"   • {SENSOR_DATA_TOPIC}")
     else:
         print(f"❌ Failed to connect to MQTT Broker. Code: {rc}")
 
 def on_message(client, userdata, msg):
     topic = msg.topic
-    payload = msg.payload.decode('utf-8').upper()
+    payload = msg.payload.decode('utf-8')
     timestamp = timezone.now().strftime("%H:%M:%S")
     
     print(f"[{timestamp}] 📨 Received: {topic} -> {payload}")
 
+    try:
+        # Handle LED status/feedback messages
+        if topic in [LED_STATUS_TOPIC, LED_FEEDBACK_TOPIC]:
+            handle_led_message(payload.upper())
+        
+        # Handle sensor data messages
+        elif topic == SENSOR_DATA_TOPIC:
+            handle_sensor_message(payload)
+        
+        else:
+            print(f"⚠️  Unknown topic: {topic}")
+            
+    except Exception as e:
+        print(f"❌ Error processing message: {e}")
+
+
+def handle_led_message(payload):
+    """จัดการข้อความสำหรับ LED"""
     try:
         # Get or create the Device object for the LED
         led_device, created = Device.objects.get_or_create(name="Onboard LED")
@@ -44,7 +66,7 @@ def on_message(client, userdata, msg):
         elif payload == "OFF":
             led_device.is_on = False
         else:
-            print(f"⚠️  Unknown payload: {payload}")
+            print(f"⚠️  Unknown LED payload: {payload}")
             return
             
         led_device.save()
@@ -52,12 +74,55 @@ def on_message(client, userdata, msg):
         # แสดงการเปลี่ยนแปลง
         if previous_status != led_device.is_on:
             status_change = "🟢 ON" if led_device.is_on else "⚫ OFF"
-            print(f"🔄 Status changed: {led_device.name} -> {status_change}")
+            print(f"🔄 LED Status changed: {led_device.name} -> {status_change}")
         else:
-            print(f"✅ Status confirmed: {led_device.name} is {'ON' if led_device.is_on else 'OFF'}")
+            print(f"✅ LED Status confirmed: {led_device.name} is {'ON' if led_device.is_on else 'OFF'}")
             
     except Exception as e:
-        print(f"❌ Error processing message: {e}")
+        print(f"❌ Error handling LED message: {e}")
+
+
+def handle_sensor_message(payload):
+    """จัดการข้อความสำหรับ sensor data"""
+    try:
+        # พยายาม parse JSON
+        try:
+            data = json.loads(payload)
+            temperature = data.get('temperature')
+            humidity = data.get('humidity')
+            device_name = data.get('device_name', 'ESP32_DHT22')
+        except json.JSONDecodeError:
+            # ถ้าไม่ใช่ JSON ลองแยกด้วย comma (format: temp,humidity)
+            parts = payload.split(',')
+            if len(parts) >= 2:
+                temperature = float(parts[0])
+                humidity = float(parts[1])
+                device_name = 'ESP32_DHT22'
+            else:
+                print(f"⚠️  Invalid sensor data format: {payload}")
+                return
+        
+        # บันทึกลง database
+        sensor_data = SensorData.objects.create(
+            device_name=device_name,
+            temperature=temperature,
+            humidity=humidity,
+            timestamp=timezone.now()
+        )
+        
+        print(f"🌡️  Temperature: {sensor_data.get_temperature_display()}")
+        print(f"💧 Humidity: {sensor_data.get_humidity_display()}")
+        print(f"✅ Sensor data saved to database (ID: {sensor_data.id})")
+        
+        # ลบข้อมูลเก่าเกิน 100 records เพื่อประหยัดพื้นที่
+        old_data = SensorData.objects.all()[100:]
+        if old_data:
+            count = len(old_data)
+            SensorData.objects.filter(id__in=[item.id for item in old_data]).delete()
+            print(f"🗑️  Cleaned up {count} old sensor records")
+            
+    except Exception as e:
+        print(f"❌ Error handling sensor message: {e}")
 
 def on_disconnect(client, userdata, rc):
     if rc != 0:
