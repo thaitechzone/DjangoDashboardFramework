@@ -57,20 +57,8 @@ def dashboard_view(request):
     # Get recent sensor data for charts (last 20 readings for better chart visualization)
     recent_sensors = SensorData.objects.order_by('-timestamp')[:20]
     
-    # Setup Thai timezone
+    # Setup Thai timezone for timezone conversion in template
     thai_tz = pytz.timezone('Asia/Bangkok')
-    
-    # Convert recent sensors to Thai time for template display
-    recent_sensors_thai = []
-    for sensor in recent_sensors:
-        sensor_thai = {
-            'id': sensor.id,
-            'device_name': sensor.device_name,
-            'temperature': sensor.temperature,
-            'humidity': sensor.humidity,
-            'timestamp': sensor.timestamp.astimezone(thai_tz)
-        }
-        recent_sensors_thai.append(sensor_thai)
     
     # Calculate sensor statistics
     sensor_stats = {
@@ -109,17 +97,15 @@ def dashboard_view(request):
     mqtt_manager = get_mqtt_manager()
     mqtt_status = mqtt_manager.get_status()
     
-    # Get current Thai time
-    current_thai_time = timezone.now().astimezone(thai_tz)
-    
     context = {
         'led': led_device,
         'latest_sensor': latest_sensor,
-        'recent_sensors': recent_sensors_thai,  # Use Thai time version
+        'recent_sensors': recent_sensors,  # Send original model objects
         'sensor_stats': sensor_stats,
         'mqtt_status': mqtt_status,
-        'last_updated': current_thai_time.strftime("%d/%m/%Y %H:%M:%S"),
-        'current_time': current_thai_time,
+        'last_updated': timezone.now().astimezone(thai_tz).strftime("%d/%m/%Y %H:%M:%S"),
+        'current_time': timezone.now().astimezone(thai_tz),
+        'thai_tz': thai_tz,  # Send timezone for template use
     }
     return render(request, 'iot_dashboard/dashboard.html', context)
 

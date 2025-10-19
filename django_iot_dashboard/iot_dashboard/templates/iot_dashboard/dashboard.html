@@ -85,6 +85,35 @@
             transform: translateY(0);
         }
 
+        /* Sensor Stats */
+        .sensor-stats {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+
+        .stat-label {
+            color: rgba(255, 255, 255, 0.7);
+            font-weight: 500;
+        }
+
+        .stat-value {
+            color: white;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.85rem;
+        }
+
         /* Auto-refresh indicator */
         .auto-refresh-indicator {
             position: fixed;
@@ -238,7 +267,7 @@
                 </div>
                 
                 <div class="last-updated">
-                    <strong>Last Updated:</strong> {{ led.get_last_updated_thai }}<br>
+                    <strong>Last Updated:</strong> {{ led.last_updated|thai_time_format:"%d/%m/%Y %H:%M:%S" }}<br>
                     <strong>Auto-refresh:</strong> Every 5 seconds
                 </div>
             </div>
@@ -248,20 +277,35 @@
                 <h2>🌡️ Temperature Sensor</h2>
                 
                 {% if latest_sensor and latest_sensor.temperature is not None %}
-                    <div class="sensor-value temp-value">
-                        {{ latest_sensor.get_temperature_display }}
+                    <div class="sensor-value temp-value" id="tempCurrent">
+                        {{ latest_sensor.temperature }}°C
                     </div>
                     <div class="sensor-status">
-                        📅 Last Reading: {{ latest_sensor.get_timestamp_thai }}
+                        📅 Last Reading: {{ latest_sensor.timestamp|thai_time_format:"%d/%m/%Y %H:%M:%S" }}
                     </div>
                 {% else %}
-                    <div class="sensor-value no-data">
+                    <div class="sensor-value no-data" id="tempCurrent">
                         📊 No Data Available
                     </div>
                     <div class="sensor-status">
                         ⚠️ Waiting for sensor data...
                     </div>
                 {% endif %}
+                
+                <div class="sensor-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">📈 Max:</span>
+                        <span class="stat-value" id="tempMax">{{ sensor_stats.temp_stats.max|floatformat:1 }}°C</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">📉 Min:</span>
+                        <span class="stat-value" id="tempMin">{{ sensor_stats.temp_stats.min|floatformat:1 }}°C</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">📊 Avg:</span>
+                        <span class="stat-value" id="tempAvg">{{ sensor_stats.temp_stats.avg|floatformat:1 }}°C</span>
+                    </div>
+                </div>
                 
                 <div style="margin-top: 15px; font-size: 12px; color: #6c757d;">
                     <strong>📡 MQTT Topic:</strong><br>
@@ -274,20 +318,36 @@
                 <h2>💧 Humidity Sensor</h2>
                 
                 {% if latest_sensor and latest_sensor.humidity is not None %}
-                    <div class="sensor-value humidity-value">
-                        {{ latest_sensor.get_humidity_display }}
+                    <div class="sensor-value humidity-value" id="humCurrent">
+                        {{ latest_sensor.humidity }}%
                     </div>
                     <div class="sensor-status">
-                        📅 Last Reading: {{ latest_sensor.get_timestamp_thai }}
+                        📅 Last Reading: {{ latest_sensor.timestamp|thai_time_format:"%d/%m/%Y %H:%M:%S" }}
                     </div>
                 {% else %}
-                    <div class="sensor-value no-data">
+                    <div class="sensor-value no-data" id="humCurrent">
                         📊 No Data Available
                     </div>
                     <div class="sensor-status">
                         ⚠️ Waiting for sensor data...
                     </div>
                 {% endif %}
+                
+                <div class="sensor-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">📈 Max:</span>
+                        <span class="stat-value" id="humMax">{{ sensor_stats.humidity_stats.max|floatformat:1 }}%</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">📉 Min:</span>
+                        <span class="stat-value" id="humMin">{{ sensor_stats.humidity_stats.min|floatformat:1 }}%</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">📊 Avg:</span>
+                        <span class="stat-value" id="humAvg">{{ sensor_stats.humidity_stats.avg|floatformat:1 }}%</span>
+                    </div>
+                </div>
+            </div>
                 
                 <div style="margin-top: 15px; font-size: 12px; color: #6c757d;">
                     <strong>📈 Sensor Info:</strong><br>
@@ -384,17 +444,17 @@
                     <tbody id="sensorDataTable">
                         {% for sensor in recent_sensors|slice:":10" %}
                         <tr>
-                            <td>{{ sensor.get_timestamp_thai }}</td>
+                            <td>{{ sensor.timestamp|thai_time_format:"%H:%M:%S" }}</td>
                             <td>
                                 {% if sensor.temperature is not None %}
-                                    <span style="color: #ff6b6b; font-weight: bold;">{{ sensor.get_temperature_display }}</span>
+                                    <span style="color: #ff6b6b; font-weight: bold;">{{ sensor.temperature|floatformat:1 }}°C</span>
                                 {% else %}
                                     <span style="color: #999;">❌ No Data</span>
                                 {% endif %}
                             </td>
                             <td>
                                 {% if sensor.humidity is not None %}
-                                    <span style="color: #4ecdc4; font-weight: bold;">{{ sensor.get_humidity_display }}</span>
+                                    <span style="color: #4ecdc4; font-weight: bold;">{{ sensor.humidity|floatformat:1 }}%</span>
                                 {% else %}
                                     <span style="color: #999;">❌ No Data</span>
                                 {% endif %}
@@ -432,17 +492,47 @@
         let updateInterval = null;
         
         // ข้อมูลเริ่มต้นสำหรับกราฟจาก Django
-        const initialSensorData = [
+        // สร้างข้อมูลเริ่มต้นสำหรับกราฟ
+        const rawSensorData = [
             {% for sensor in recent_sensors %}
             {
-                timestamp: '{{ sensor.timestamp|date:"H:i:s" }}',
+                timestamp: '{{ sensor.timestamp|thai_time_format:"%H:%M:%S" }}',
                 temperature: {% if sensor.temperature is not None %}{{ sensor.temperature }}{% else %}null{% endif %},
                 humidity: {% if sensor.humidity is not None %}{{ sensor.humidity }}{% else %}null{% endif %}
             }{% if not forloop.last %},{% endif %}
             {% endfor %}
-        ].reverse(); // เรียงจากเก่าไปใหม่
+        ];
         
+        // เรียงข้อมูลจากเก่าไปใหม่ (reverse array)
+        let initialSensorData = rawSensorData.slice().reverse();
+        
+        console.log('📊 Raw sensor data count:', rawSensorData.length);
         console.log('📊 Initial sensor data:', initialSensorData);
+        
+        // ถ้าไม่มีข้อมูล ให้สร้างข้อมูลทดสอบ
+        if (initialSensorData.length === 0) {
+            console.warn('⚠️ No sensor data from template, creating test data');
+            const now = new Date();
+            initialSensorData = [];
+            
+            for (let i = 9; i >= 0; i--) {
+                const time = new Date(now.getTime() - (i * 60000)); // ทุก 1 นาที
+                initialSensorData.push({
+                    timestamp: time.toLocaleTimeString('th-TH', { 
+                        hour: '2-digit', 
+                        minute: '2-digit', 
+                        second: '2-digit',
+                        hour12: false 
+                    }),
+                    temperature: 25 + Math.random() * 10, // 25-35°C
+                    humidity: 50 + Math.random() * 20     // 50-70%
+                });
+            }
+            console.log('📊 Generated test data:', initialSensorData);
+        }
+        
+        console.log('📊 First data point:', initialSensorData[0]);
+        console.log('📊 Last data point:', initialSensorData[initialSensorData.length - 1]);
         
         // ฟังก์ชันคำนวณสถิติ
         function calculateStats(data, key) {
@@ -467,13 +557,24 @@
             }
             
             console.log('🌡️ Creating temperature chart...');
+            console.log('📊 Available initial data:', initialSensorData);
             
             // เตรียมข้อมูล
             const tempData = initialSensorData.filter(item => item.temperature !== null);
             const labels = tempData.map(item => item.timestamp);
             const temperatures = tempData.map(item => item.temperature);
             
-            console.log('Temperature data:', { labels, temperatures });
+            console.log('🔍 Filtered temperature data:', { 
+                tempData: tempData.length, 
+                labels, 
+                temperatures,
+                hasData: tempData.length > 0
+            });
+            
+            if (tempData.length === 0) {
+                console.warn('⚠️ No temperature data available for chart');
+                return null;
+            }
             
             return new Chart(ctx, {
                 type: 'line',
@@ -560,13 +661,24 @@
             }
             
             console.log('💧 Creating humidity chart...');
+            console.log('📊 Available initial data:', initialSensorData);
             
             // เตรียมข้อมูล
             const humData = initialSensorData.filter(item => item.humidity !== null);
             const labels = humData.map(item => item.timestamp);
             const humidities = humData.map(item => item.humidity);
             
-            console.log('Humidity data:', { labels, humidities });
+            console.log('🔍 Filtered humidity data:', { 
+                humData: humData.length, 
+                labels, 
+                humidities,
+                hasData: humData.length > 0
+            });
+            
+            if (humData.length === 0) {
+                console.warn('⚠️ No humidity data available for chart');
+                return null;
+            }
             
             return new Chart(ctx, {
                 type: 'line',
@@ -774,8 +886,10 @@
                         console.log('💧 Humidity chart updated');
                     }
                     
-                    // อัพเดทสถิติ
+                    // อัพเดทสถิติและ sensor cards
                     updateStats(newData);
+                    await updateSensorCards();
+                    await updateRecentReadings();
                     
                     // แสดงข้อมูลล่าสุด
                     if (result.latest) {
@@ -803,6 +917,88 @@
             }
         }
 
+        // อัพเดท sensor cards
+        async function updateSensorCards() {
+            try {
+                const response = await fetch('/api/sensor-data/?limit=1');
+                const result = await response.json();
+                
+                if (result.success && result.data.length > 0) {
+                    const latest = result.data[0];
+                    
+                    // อัพเดท Temperature card
+                    const tempCurrentEl = document.getElementById('tempCurrent');
+                    if (tempCurrentEl && latest.temperature !== null) {
+                        tempCurrentEl.textContent = `${latest.temperature.toFixed(1)}°C`;
+                        tempCurrentEl.className = 'sensor-value temp-value';
+                    }
+                    
+                    // อัพเดท Humidity card
+                    const humCurrentEl = document.getElementById('humCurrent');
+                    if (humCurrentEl && latest.humidity !== null) {
+                        humCurrentEl.textContent = `${latest.humidity.toFixed(1)}%`;
+                        humCurrentEl.className = 'sensor-value humidity-value';
+                    }
+                    
+                    console.log('📊 Sensor cards updated');
+                }
+            } catch (error) {
+                console.error('❌ Error updating sensor cards:', error);
+            }
+        }
+
+        // อัพเดท recent readings table
+        async function updateRecentReadings() {
+            try {
+                const response = await fetch('/api/sensor-data/?limit=10');
+                const result = await response.json();
+                
+                if (result.success && result.data.length > 0) {
+                    const tableBody = document.getElementById('sensorDataTable');
+                    if (tableBody) {
+                        tableBody.innerHTML = '';
+                        
+                        result.data.forEach(sensor => {
+                            const row = document.createElement('tr');
+                            
+                            // แปลง timestamp เป็นเวลาไทย
+                            const sensorTime = new Date(sensor.timestamp + ' UTC');
+                            const thaiTime = new Intl.DateTimeFormat('th-TH', {
+                                timeZone: 'Asia/Bangkok',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false
+                            }).format(sensorTime);
+                            
+                            row.innerHTML = `
+                                <td>${thaiTime}</td>
+                                <td>
+                                    ${sensor.temperature !== null ? 
+                                        `<span style="color: #ff6b6b; font-weight: bold;">${sensor.temperature.toFixed(1)}°C</span>` :
+                                        `<span style="color: #999;">❌ No Data</span>`
+                                    }
+                                </td>
+                                <td>
+                                    ${sensor.humidity !== null ? 
+                                        `<span style="color: #4ecdc4; font-weight: bold;">${sensor.humidity.toFixed(1)}%</span>` :
+                                        `<span style="color: #999;">❌ No Data</span>`
+                                    }
+                                </td>
+                                <td style="font-size: 12px; color: #666;">${sensor.device_name}</td>
+                            `;
+                            
+                            tableBody.appendChild(row);
+                        });
+                        
+                        console.log('📋 Recent readings updated');
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error updating recent readings:', error);
+            }
+        }
+
         // Initialize charts และ real-time updates
         function initializeDashboard() {
             console.log('🚀 Initializing dashboard...');
@@ -815,21 +1011,39 @@
             }
             
             console.log('✅ Chart.js loaded successfully');
+            console.log('📊 Initial data length:', initialSensorData.length);
+            console.log('📊 Sample data:', initialSensorData.slice(0, 3));
+            
+            // ตรวจสอบ Canvas elements
+            const tempCanvas = document.getElementById('temperatureChart');
+            const humCanvas = document.getElementById('humidityChart');
+            
+            console.log('🎨 Canvas elements check:');
+            console.log('  - Temperature canvas:', tempCanvas ? 'Found ✅' : 'Not found ❌');
+            console.log('  - Humidity canvas:', humCanvas ? 'Found ✅' : 'Not found ❌');
+            
+            if (!tempCanvas || !humCanvas) {
+                console.error('❌ Canvas elements not found - DOM might not be ready');
+                alert('Canvas elements not found. Please refresh the page.');
+                return;
+            }
             
             // สร้างกราฟ
             try {
+                console.log('🚀 Creating charts...');
+                
                 temperatureChart = createTemperatureChart();
                 if (temperatureChart) {
-                    console.log('✅ Temperature chart created');
+                    console.log('✅ Temperature chart created successfully');
                 } else {
-                    console.error('❌ Failed to create temperature chart');
+                    console.error('❌ Failed to create temperature chart - check data');
                 }
                 
                 humidityChart = createHumidityChart();
                 if (humidityChart) {
-                    console.log('✅ Humidity chart created');
+                    console.log('✅ Humidity chart created successfully');
                 } else {
-                    console.error('❌ Failed to create humidity chart');
+                    console.error('❌ Failed to create humidity chart - check data');
                 }
                 
                 // อัพเดทสถิติเริ่มต้น
@@ -840,7 +1054,11 @@
                 updateInterval = setInterval(updateRealTimeData, 5000);
                 
                 // อัพเดทครั้งแรกหลังจาก 2 วินาที
-                setTimeout(updateRealTimeData, 2000);
+                setTimeout(() => {
+                    updateRealTimeData();
+                    updateSensorCards();
+                    updateRecentReadings();
+                }, 2000);
                 
                 console.log('🚀 Dashboard initialized with', initialSensorData.length, 'data points');
                 
@@ -887,14 +1105,29 @@
                 refreshBtn.disabled = true;
             }
             
-            // เรียก update function
-            updateRealTimeData().then(() => {
+            // เรียก update functions ทั้งหมด
+            Promise.all([
+                updateRealTimeData(),
+                updateSensorCards(),
+                updateRecentReadings()
+            ]).then(() => {
                 // รีเซ็ต button หลังจาก 1 วินาที
                 setTimeout(() => {
                     if (refreshBtn) {
-                        refreshBtn.innerHTML = '🔄 Refresh';
+                        refreshBtn.innerHTML = '🔄 รีเฟรช';
                         refreshBtn.disabled = false;
                     }
+                }, 1000);
+                
+                console.log('✅ Manual refresh completed');
+            }).catch(error => {
+                console.error('❌ Error during manual refresh:', error);
+                if (refreshBtn) {
+                    refreshBtn.innerHTML = '🔄 รีเฟรช';
+                    refreshBtn.disabled = false;
+                }
+            });
+        }
                 }, 1000);
             });
         }

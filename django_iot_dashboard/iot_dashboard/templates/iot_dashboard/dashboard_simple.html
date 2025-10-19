@@ -1,0 +1,485 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>🏠 IoT Dashboard - Temperature & Humidity</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Chart.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .dashboard-header {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .dashboard-header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .update-time {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+        
+        .card h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        
+        .sensor-value {
+            font-size: 48px;
+            font-weight: bold;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .temperature-value {
+            color: #ff6b6b;
+        }
+        
+        .humidity-value {
+            color: #4ecdc4;
+        }
+        
+        .sensor-info {
+            color: #666;
+            font-size: 14px;
+            text-align: center;
+            margin-top: 10px;
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 20px;
+        }
+        
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
+        }
+        
+        .led-control {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .btn {
+            flex: 1;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #229954;
+        }
+        
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .status-on {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-off {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .recent-readings {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        
+        .readings-table {
+            width: 100%;
+            margin-top: 15px;
+            border-collapse: collapse;
+        }
+        
+        .readings-table th {
+            background: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            border-bottom: 2px solid #dee2e6;
+        }
+        
+        .readings-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .readings-table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .sensor-value {
+                font-size: 36px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <div class="dashboard-header">
+            <h1>🏠 IoT Dashboard - Temperature & Humidity Monitoring</h1>
+            <div class="update-time">
+                <span id="current-time">{{ current_time|date:"d/m/Y H:i:s" }}</span>
+                <button onclick="refreshData()" style="margin-left: 15px; padding: 5px 15px; border-radius: 5px; border: 1px solid #ccc; background: white; cursor: pointer;">
+                    🔄 Refresh
+                </button>
+            </div>
+        </div>
+        
+        <!-- Sensor Cards -->
+        <div class="dashboard-grid">
+            <!-- Temperature Card -->
+            <div class="card">
+                <h2>🌡️ Temperature</h2>
+                <div class="sensor-value temperature-value" id="temp-value">
+                    {% if latest_sensor and latest_sensor.temperature %}
+                        {{ latest_sensor.temperature|floatformat:1 }}°C
+                    {% else %}
+                        --°C
+                    {% endif %}
+                </div>
+                <div class="sensor-info">
+                    Last updated: <span id="temp-time">
+                        {% if latest_sensor %}
+                            {{ latest_sensor.timestamp|date:"H:i:s" }}
+                        {% else %}
+                            --:--:--
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+            
+            <!-- Humidity Card -->
+            <div class="card">
+                <h2>💧 Humidity</h2>
+                <div class="sensor-value humidity-value" id="humidity-value">
+                    {% if latest_sensor and latest_sensor.humidity %}
+                        {{ latest_sensor.humidity|floatformat:1 }}%
+                    {% else %}
+                        --%
+                    {% endif %}
+                </div>
+                <div class="sensor-info">
+                    Last updated: <span id="humidity-time">
+                        {% if latest_sensor %}
+                            {{ latest_sensor.timestamp|date:"H:i:s" }}
+                        {% else %}
+                            --:--:--
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+            
+            <!-- LED Control Card -->
+            <div class="card led-control">
+                <h2>💡 {{ led.name }}</h2>
+                <div class="status-indicator {% if led.is_on %}status-on{% else %}status-off{% endif %}">
+                    {% if led.is_on %}
+                        🟢 ON
+                    {% else %}
+                        ⚫ OFF
+                    {% endif %}
+                </div>
+                <div class="control-buttons">
+                    <form method="post" action="{% url 'control_led' %}" style="flex: 1;">
+                        {% csrf_token %}
+                        <button type="submit" name="action" value="on" class="btn btn-success" style="width: 100%;">
+                            🟢 Turn ON
+                        </button>
+                    </form>
+                    <form method="post" action="{% url 'control_led' %}" style="flex: 1;">
+                        {% csrf_token %}
+                        <button type="submit" name="action" value="off" class="btn btn-danger" style="width: 100%;">
+                            ⚫ Turn OFF
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Temperature Chart -->
+        <div class="chart-container">
+            <h2>📈 Temperature Chart (Last 20 Readings)</h2>
+            <div class="chart-wrapper">
+                <canvas id="temperatureChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- Humidity Chart -->
+        <div class="chart-container">
+            <h2>💧 Humidity Chart (Last 20 Readings)</h2>
+            <div class="chart-wrapper">
+                <canvas id="humidityChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- Recent Readings Table -->
+        <div class="recent-readings">
+            <h2>📋 Recent Readings</h2>
+            <table class="readings-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Temperature</th>
+                        <th>Humidity</th>
+                        <th>Device</th>
+                    </tr>
+                </thead>
+                <tbody id="readings-tbody">
+                    {% for sensor in recent_sensors|slice:":10" %}
+                    <tr>
+                        <td>{{ sensor.timestamp|date:"d/m/Y H:i:s" }}</td>
+                        <td>{{ sensor.temperature|floatformat:1 }}°C</td>
+                        <td>{{ sensor.humidity|floatformat:1 }}%</td>
+                        <td>{{ sensor.device_name }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 20px;">
+                            No sensor data available
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <script>
+        // Chart data from Django
+        const chartData = {
+            labels: [],
+            temperatures: [],
+            humidities: []
+        };
+        
+        {% for sensor in recent_sensors %}
+        chartData.labels.push('{{ sensor.timestamp|date:"H:i:s" }}');
+        chartData.temperatures.push({{ sensor.temperature|default:"null" }});
+        chartData.humidities.push({{ sensor.humidity|default:"null" }});
+        {% endfor %}
+        
+        // Reverse arrays to show oldest to newest
+        chartData.labels.reverse();
+        chartData.temperatures.reverse();
+        chartData.humidities.reverse();
+        
+        console.log('Chart data loaded:', chartData);
+        
+        // Temperature Chart
+        const tempCtx = document.getElementById('temperatureChart').getContext('2d');
+        const temperatureChart = new Chart(tempCtx, {
+            type: 'line',
+            data: {
+                labels: chartData.labels,
+                datasets: [{
+                    label: 'Temperature (°C)',
+                    data: chartData.temperatures,
+                    borderColor: '#ff6b6b',
+                    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        title: {
+                            display: true,
+                            text: 'Temperature (°C)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Humidity Chart
+        const humCtx = document.getElementById('humidityChart').getContext('2d');
+        const humidityChart = new Chart(humCtx, {
+            type: 'line',
+            data: {
+                labels: chartData.labels,
+                datasets: [{
+                    label: 'Humidity (%)',
+                    data: chartData.humidities,
+                    borderColor: '#4ecdc4',
+                    backgroundColor: 'rgba(78, 205, 196, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        title: {
+                            display: true,
+                            text: 'Humidity (%)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    }
+                }
+            }
+        });
+        
+        console.log('✅ Charts created successfully');
+        
+        // Update current time
+        function updateTime() {
+            const now = new Date();
+            const options = {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            };
+            document.getElementById('current-time').textContent = now.toLocaleString('th-TH', options);
+        }
+        
+        // Refresh data
+        function refreshData() {
+            location.reload();
+        }
+        
+        // Update time every second
+        setInterval(updateTime, 1000);
+        updateTime();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(refreshData, 30000);
+    </script>
+</body>
+</html>
