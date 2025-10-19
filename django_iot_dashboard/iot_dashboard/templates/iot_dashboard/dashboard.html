@@ -4,7 +4,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>🏠 IoT Dashboard with Real-time Charts</title>
+    <title>🏠 IoTs Dashboard Monitoring</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
     <!-- Chart.js Library -->
@@ -14,6 +14,12 @@
     <link rel="stylesheet" type="text/css" href="{% static 'iot_dashboard/dashboard.css' %}">
     
     <style>
+        /* Override Body Background */
+        body {
+            background: linear-gradient(135deg, #d4f1d4 0%, #f5f5dc 50%, #fffacd 100%) !important;
+            min-height: 100vh;
+        }
+        
         /* Dashboard Header */
         .dashboard-header {
             display: flex;
@@ -27,7 +33,7 @@
         .dashboard-header h1 {
             margin: 0;
             font-size: 2.5rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #52b788 0%, #74c69d 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -45,11 +51,11 @@
             font-size: 1.1rem;
             font-weight: 600;
             color: #2c3e50;
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            background: linear-gradient(135deg, #52b788, #74c69d);
             color: white;
             padding: 0.5rem 1rem;
             border-radius: 20px;
-            box-shadow: 0 2px 10px rgba(102, 126, 234, 0.3);
+            box-shadow: 0 2px 10px rgba(82, 183, 136, 0.3);
         }
 
         .update-status {
@@ -63,7 +69,7 @@
 
         /* Manual refresh button */
         .manual-refresh-btn {
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            background: linear-gradient(135deg, #52b788, #74c69d);
             color: white;
             border: none;
             padding: 0.4rem 0.8rem;
@@ -73,12 +79,12 @@
             cursor: pointer;
             margin-left: 0.5rem;
             transition: all 0.3s ease;
-            box-shadow: 0 2px 5px rgba(102, 126, 234, 0.3);
+            box-shadow: 0 2px 5px rgba(82, 183, 136, 0.3);
         }
 
         .manual-refresh-btn:hover {
             transform: translateY(-1px);
-            box-shadow: 0 4px 10px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 4px 10px rgba(82, 183, 136, 0.4);
         }
 
         .manual-refresh-btn:active {
@@ -192,7 +198,7 @@
     
     <div class="dashboard-container">
         <div class="dashboard-header">
-            <h1>🏠 IoT Dashboard with Real-time Charts</h1>
+            <h1>🏠 IoTs Dashboard Monitoring</h1>
             <div class="header-info">
                 <div class="datetime-display">
                     <span id="current-time">{{ last_updated }}</span>
