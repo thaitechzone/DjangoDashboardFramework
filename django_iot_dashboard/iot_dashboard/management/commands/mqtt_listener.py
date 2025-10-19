@@ -10,7 +10,12 @@ MQTT_PORT = 1883
 LED_STATUS_TOPIC = "thaitechzone/v2_board/state/led"  # ESP32 ส่งสถานะมา
 LED_CONTROL_TOPIC = "thaitechzone/v2_board/control/led"  # เราส่งคำสั่งไป
 LED_FEEDBACK_TOPIC = "thaitechzone/v2_board/feedback/led"  # ESP32 ตอบกลับ
-SENSOR_DATA_TOPIC = "thaitechzone/v2_board/sensors/data"  # ESP32 ส่งข้อมูล sensor
+SENSOR_DATA_TOPIC = "thaitechzone/v2_board/sensor/data"  # ESP32 ส่งข้อมูล sensor (แก้จาก sensors → sensor)
+
+# RELAY Topics
+RELAY1_STATE_TOPIC = "thaitechzone/v2_board/state/relay1"
+RELAY2_STATE_TOPIC = "thaitechzone/v2_board/state/relay2"
+RELAY3_STATE_TOPIC = "thaitechzone/v2_board/state/relay3"
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -19,19 +24,27 @@ def on_connect(client, userdata, flags, rc):
         client.subscribe(LED_STATUS_TOPIC, qos=1)
         client.subscribe(LED_FEEDBACK_TOPIC, qos=1)
         client.subscribe(SENSOR_DATA_TOPIC, qos=1)
+        client.subscribe(RELAY1_STATE_TOPIC, qos=1)
+        client.subscribe(RELAY2_STATE_TOPIC, qos=1)
+        client.subscribe(RELAY3_STATE_TOPIC, qos=1)
         print(f"📡 Subscribed to topics:")
         print(f"   • {LED_STATUS_TOPIC}")
         print(f"   • {LED_FEEDBACK_TOPIC}")
         print(f"   • {SENSOR_DATA_TOPIC}")
+        print(f"   • {RELAY1_STATE_TOPIC}")
+        print(f"   • {RELAY2_STATE_TOPIC}")
+        print(f"   • {RELAY3_STATE_TOPIC}")
     else:
         print(f"❌ Failed to connect to MQTT Broker. Code: {rc}")
 
 def on_message(client, userdata, msg):
     topic = msg.topic
     payload = msg.payload.decode('utf-8')
-    timestamp = timezone.now().strftime("%H:%M:%S")
+    timestamp = timezone.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    print(f"[{timestamp}] 📨 Received: {topic} -> {payload}")
+    print(f"\n[{timestamp}] 📨 Message Received:")
+    print(f"  Topic: {topic}")
+    print(f"  Payload: {payload}")
 
     try:
         # Handle LED status/feedback messages
@@ -42,11 +55,17 @@ def on_message(client, userdata, msg):
         elif topic == SENSOR_DATA_TOPIC:
             handle_sensor_message(payload)
         
+        # Handle RELAY state messages
+        elif topic in [RELAY1_STATE_TOPIC, RELAY2_STATE_TOPIC, RELAY3_STATE_TOPIC]:
+            handle_relay_message(topic, payload.upper())
+        
         else:
             print(f"⚠️  Unknown topic: {topic}")
             
     except Exception as e:
         print(f"❌ Error processing message: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def handle_led_message(payload):
@@ -82,6 +101,47 @@ def handle_led_message(payload):
         print(f"❌ Error handling LED message: {e}")
 
 
+def handle_relay_message(topic, payload):
+    """จัดการข้อความสำหรับ RELAY state"""
+    try:
+        from iot_dashboard.models import Relay
+        
+        # หา relay number จาก topic
+        if "relay1" in topic:
+            relay_num = 1
+        elif "relay2" in topic:
+            relay_num = 2
+        elif "relay3" in topic:
+            relay_num = 3
+        else:
+            print(f"⚠️  Unknown RELAY topic: {topic}")
+            return
+        
+        # Get or create Relay controller
+        relay_controller, created = Relay.objects.get_or_create(name="Relay Controller")
+        if created:
+            print(f"🆕 Created new RELAY controller")
+        
+        # Update status
+        field_name = f"relay{relay_num}_status"
+        old_status = getattr(relay_controller, field_name)
+        new_status = (payload == "ON")
+        setattr(relay_controller, field_name, new_status)
+        relay_controller.save()
+        
+        # แสดงผล
+        status_icon = "🟢" if new_status else "⚫"
+        print(f"⚡ RELAY {relay_num} Status: {status_icon} {payload}")
+        if old_status != new_status:
+            print(f"  → Changed from {'ON' if old_status else 'OFF'} to {payload}")
+        print(f"✅ RELAY {relay_num} state saved to database")
+        
+    except Exception as e:
+        print(f"❌ Error handling RELAY message: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 def handle_sensor_message(payload):
     """จัดการข้อความสำหรับ sensor data"""
     try:
@@ -91,6 +151,11 @@ def handle_sensor_message(payload):
             temperature = data.get('temperature')
             humidity = data.get('humidity')
             device_name = data.get('device_name', 'ESP32_DHT22')
+            
+            print(f"  📊 Parsed JSON data:")
+            print(f"     Temperature: {temperature}°C")
+            print(f"     Humidity: {humidity}%")
+            
         except json.JSONDecodeError:
             # ถ้าไม่ใช่ JSON ลองแยกด้วย comma (format: temp,humidity)
             parts = payload.split(',')
@@ -98,8 +163,13 @@ def handle_sensor_message(payload):
                 temperature = float(parts[0])
                 humidity = float(parts[1])
                 device_name = 'ESP32_DHT22'
+                print(f"  📊 Parsed CSV data:")
+                print(f"     Temperature: {temperature}°C")
+                print(f"     Humidity: {humidity}%")
             else:
                 print(f"⚠️  Invalid sensor data format: {payload}")
+                print(f"  Expected: JSON {{'temperature': 28.5, 'humidity': 65.2}}")
+                print(f"  Or CSV: 28.5,65.2")
                 return
         
         # บันทึกลง database
@@ -114,15 +184,22 @@ def handle_sensor_message(payload):
         print(f"💧 Humidity: {sensor_data.get_humidity_display()}")
         print(f"✅ Sensor data saved to database (ID: {sensor_data.id})")
         
+        # นับจำนวน records
+        total_count = SensorData.objects.count()
+        print(f"📊 Total sensor records in database: {total_count}")
+        
         # ลบข้อมูลเก่าเกิน 100 records เพื่อประหยัดพื้นที่
-        old_data = SensorData.objects.all()[100:]
-        if old_data:
-            count = len(old_data)
-            SensorData.objects.filter(id__in=[item.id for item in old_data]).delete()
-            print(f"🗑️  Cleaned up {count} old sensor records")
+        if total_count > 100:
+            old_data = SensorData.objects.all().order_by('-timestamp')[100:]
+            count = old_data.count()
+            if count > 0:
+                SensorData.objects.filter(id__in=[item.id for item in old_data]).delete()
+                print(f"🗑️  Cleaned up {count} old sensor records")
             
     except Exception as e:
         print(f"❌ Error handling sensor message: {e}")
+        import traceback
+        traceback.print_exc()
 
 def on_disconnect(client, userdata, rc):
     if rc != 0:

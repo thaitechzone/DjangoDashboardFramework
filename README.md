@@ -1,94 +1,232 @@
-# 🚀 Django IoT Dashboard Framework
+# 🏠 IoTs Dashboard Monitoring - Django Framework
 
-**ระบบควบคุมอุปกรณ์ IoT ผ่านเว็บ Dashboard ด้วย Django + ESP32 + MQTT**
+**ระบบควบคุมและติดตามอุปกรณ์ IoT ผ่านเว็บ Dashboard แบบ Real-time**  
+**Django + ESP32 + MQTT + Chart.js**
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
-[![Django](https://img.shields.io/badge/Django-5.2+-green.svg)](https://djangoproject.com)
+[![Django](https://img.shields.io/badge/Django-5.2.7-green.svg)](https://djangoproject.com)
 [![ESP32](https://img.shields.io/badge/ESP32-Arduino-red.svg)](https://arduino.cc)
-[![MQTT](https://img.shields.io/badge/MQTT-Broker-orange.svg)](https://mqtt.org)
+[![MQTT](https://img.shields.io/badge/MQTT-HiveMQ-orange.svg)](https://mqtt.org)
+[![Chart.js](https://img.shields.io/badge/Chart.js-4.4.0-ff6384.svg)](https://www.chartjs.org/)
 
 ---
 
 ## 📋 สารบัญ
 
-1. [ภาพรวมโปรเจกต์](#ภาพรวมโปรเจกต์)
-2. [ความสามารถของระบบ](#ความสามารถของระบบ)
-3. [สถาปัตยกรรมระบบ](#สถาปัตยกรรมระบบ)
-4. [ความต้องการของระบบ](#ความต้องการของระบบ)
-5. [ขั้นตอนการติดตั้ง](#ขั้นตอนการติดตั้ง)
-6. [การกำหนดค่าฐานข้อมูล](#การกำหนดค่าฐานข้อมูล)
-7. [การรันระบบ](#การรันระบบ)
-8. [การเขียนโปรแกรม ESP32](#การเขียนโปรแกรม-esp32)
-9. [การทดสอบระบบ](#การทดสอบระบบ)
-10. [การแก้ไขปัญหา](#การแก้ไขปัญหาที่พบบ่อย)
-11. [การพัฒนาต่อ](#การพัฒนาต่อ)
+1. [ภาพรวมโปรเจกต์](#-ภาพรวมโปรเจกต์)
+2. [ความสามารถของระบบ](#-ความสามารถของระบบ)
+3. [สถาปัตยกรรมระบบ](#️-สถาปัตยกรรมระบบ)
+4. [ความต้องการของระบบ](#-ความต้องการของระบบ)
+5. [ขั้นตอนการติดตั้งระบบ](#-ขั้นตอนการติดตั้งระบบ)
+6. [การตั้งค่าฐานข้อมูล](#️-การตั้งค่าฐานข้อมูล)
+7. [การรันเซิร์ฟเวอร์](#️-การรันเซิร์ฟเวอร์)
+8. [การโปรแกรม ESP32](#-การโปรแกรม-esp32)
+9. [MQTT Topics และการสื่อสาร](#-mqtt-topics-และการสื่อสาร)
+10. [การทดสอบระบบ](#-การทดสอบระบบ)
+11. [การแก้ไขปัญหา](#️-การแก้ไขปัญหาที่พบบ่อย)
+12. [การพัฒนาต่อยอด](#-การพัฒนาต่อยอด)
+13. [เอกสารอ้างอิง](#-เอกสารอ้างอิง)
 
 ---
 
 ## 🎯 ภาพรวมโปรเจกต์
 
-โปรเจกต์นี้เป็น **Framework สำหรับสร้าง IoT Dashboard** ที่ให้คุณสามารถควบคุมอุปกรณ์ ESP32 ผ่านเว็บเบราว์เซอร์ได้ โดยใช้เทคโนโลยี:
+โปรเจกต์นี้เป็น **IoT Dashboard Framework ที่สมบูรณ์** สำหรับสร้างระบบควบคุมและติดตามอุปกรณ์ ESP32 แบบ Real-time ผ่านเว็บเบราว์เซอร์
 
-- **🌐 Django Web Framework** - สำหรับสร้าง Dashboard
-- **📡 MQTT Protocol** - สำหรับการสื่อสารระหว่างเว็บกับ ESP32
-- **💾 SQLite Database** - สำหรับเก็บสถานะอุปกรณ์
-- **🔄 Real-time Updates** - อัปเดตสถานะแบบ Real-time
-- **📱 Responsive UI** - ใช้งานได้ทั้งคอมพิวเตอร์และมือถือ
+### 🌟 จุดเด่นของระบบ:
+
+- 🎛️ **ควบคุมได้หลากหลาย** - LED และ RELAY 3 ช่อง
+- 🌡️ **ติดตามข้อมูล Sensor** - อุณหภูมิและความชื้นแบบ Real-time
+- � **กราฟและการแสดงผล** - Chart.js สำหรับแสดงประวัติข้อมูล
+- 🔄 **การสื่อสาร 2 ทาง** - Dashboard ↔ ESP32 ผ่าน MQTT
+- ⏰ **เวลาไทย (UTC+7)** - แสดงเวลาไทยถูกต้องทุกจุด
+- � **Responsive Design** - ใช้งานได้ทั้ง Desktop และ Mobile
+- 🎨 **UI สวยงาม** - Gradient background และ animations
+
+### 🛠️ เทคโนโลยีที่ใช้:
+
+| ส่วน | เทคโนโลยี | รายละเอียด |
+|------|-----------|-----------|
+| **Backend** | Django 5.2.7 | Web Framework |
+| **Frontend** | HTML5, CSS3, JavaScript | UI/UX |
+| **Charts** | Chart.js 4.4.0 | Data Visualization |
+| **Communication** | MQTT (Paho) | IoT Protocol |
+| **Database** | SQLite | Data Storage |
+| **Hardware** | ESP32 | IoT Device |
+| **IDE** | Arduino IDE | ESP32 Programming |
 
 ---
 
 ## ✨ ความสามารถของระบบ
 
-### 🎮 การควบคุมอุปกรณ์
+### 1. 💡 การควบคุม LED (Onboard LED)
 - ✅ **เปิด/ปิด LED** บน ESP32 ผ่านปุ่มบนเว็บ
-- ✅ **Toggle สถานะ** LED อัตโนมัติ
-- ✅ **ควบคุมผ่าน MQTT Explorer** ได้ด้วย
+- ✅ **แสดงสถานะ Real-time** (🟢 ON / ⚫ OFF)
+- ✅ **อัปเดตสถานะทันที** เมื่อมีการเปลี่ยนแปลง
+- ✅ **ควบคุมจากหลายแหล่ง** (Web, MQTT Explorer, ESP32)
 
-### 📊 การแสดงสถานะ
-- ✅ **แสดงสถานะปัจจุบัน** ของ LED (ON/OFF)
-- ✅ **อัปเดตอัตโนมัติ** ทุก 2 วินาที
-- ✅ **แสดงเวลาอัปเดตล่าสุด**
-- ✅ **แสดงข้อความสถานะ** (Success/Error)
+### 2. ⚡ การควบคุม RELAY (3 ช่อง)
+- ✅ **ควบคุม RELAY 3 ช่อง** แยกอิสระ
+- ✅ **ปุ่ม ON/OFF/Toggle** สำหรับแต่ละ relay
+- ✅ **แสดงสถานะแต่ละ relay** แบบ Real-time
+- ✅ **Layout แนวนอน** เหมาะสำหรับควบคุมหลายๆ relay
+- ✅ **Responsive** - ปรับขนาดตามหน้าจอ (3 คอลัมน์ → 2 → 1)
 
-### 🔄 การสื่อสารแบบสองทาง
-- ✅ **Web → ESP32**: ส่งคำสั่งควบคุม
-- ✅ **ESP32 → Web**: รับสถานะกลับมา
-- ✅ **External Control**: ควบคุมผ่านแอพอื่นๆ ได้
+### 3. 🌡️ การติดตามข้อมูล Sensor
+- ✅ **แสดงอุณหภูมิ** (Temperature) แบบ Real-time
+- ✅ **แสดงความชื้น** (Humidity) แบบ Real-time
+- ✅ **กราฟ Temperature** แสดงประวัติ 20 ครั้งล่าสุด
+- ✅ **กราฟ Humidity** แสดงประวัติ 20 ครั้งล่าสุด
+- ✅ **ตาราง Recent Readings** แสดง 10 รายการล่าสุด
+- ✅ **เวลาอัปเดตล่าสุด** สำหรับแต่ละ sensor
 
-### 🎨 ส่วนติดต่อผู้ใช้
-- ✅ **UI ที่สวยงาม** พร้อม Bootstrap
-- ✅ **Gradient Background** และ animations
-- ✅ **LED Indicator** แสดงสถานะแบบ visual
-- ✅ **Auto-refresh** พร้อม indicator
+### 4. 🔄 การสื่อสารแบบ 2 ทาง (Bidirectional)
+
+#### Dashboard → ESP32 (Control Commands):
+```
+User กดปุ่ม → Django ส่งคำสั่ง MQTT → ESP32 รับและทำงาน
+```
+
+#### ESP32 → Dashboard (State Updates):
+```
+ESP32 เปลี่ยนสถานะ → ส่ง MQTT กลับมา → Django อัปเดต Database → UI แสดงผล
+```
+
+### 5. ⏰ ระบบเวลา Thailand Timezone
+- ✅ **แสดงเวลาไทย (UTC+7)** ทุกจุด
+- ✅ **Current Time** อัปเดตทุกวินาที
+- ✅ **Last Updated** ใน Temperature/Humidity cards
+- ✅ **กราฟแกน X** แสดงเวลาไทย
+- ✅ **Recent Readings Table** แสดงวันที่และเวลาไทย
+- ✅ **Auto-refresh** ทุก 5 วินาที พร้อม timezone ที่ถูกต้อง
+
+### 6. 🎨 ส่วนติดต่อผู้ใช้ (UI/UX)
+- ✅ **Gradient Background** สีเขียวอ่อนพาสเทล
+- ✅ **Cards Design** สวยงามพร้อม shadows
+- ✅ **Button Animations** hover effects
+- ✅ **Status Indicators** สีเขียว/แดง แสดงสถานะ
+- ✅ **Loading Indicators** แสดงขณะกำลังทำงาน
+- ✅ **Success Messages** แจ้งผลการทำงาน
+- ✅ **Auto-update Indicator** แสดงสถานะการรีเฟรช
 
 ---
 
 ## 🏗️ สถาปัตยกรรมระบบ
 
+### 📐 ภาพรวมการทำงาน:
+
 ```
-┌─────────────────┐    MQTT Commands     ┌─────────────────┐
-│                 │ pub: ../control/led  │                 │
-│   Web Browser   │ ──────────────────► │     ESP32       │
-│   (Dashboard)   │                      │   (LED Control) │
-│                 │ ◄────────────────── │                 │
-└─────────────────┘  sub: ../state/led   └─────────────────┘
-         │                                        │
-         │ HTTP                                   │ WiFi + MQTT
-         ▼                                        │
-┌─────────────────┐    MQTT Messages     ┌─────────────────┐
-│  Django Server  │ ◄──────────────────► │  MQTT Broker    │
-│                 │  Topic Management    │ (HiveMQ Public) │
-│ ┌─────────────┐ │                      └─────────────────┘
-│ │   SQLite    │ │
-│ │  Database   │ │
-│ └─────────────┘ │
-└─────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                      ผู้ใช้งาน (User)                         │
+│              Web Browser (Chrome/Firefox/Edge)                │
+└────────────────────────┬─────────────────────────────────────┘
+                         │ HTTP (Port 8000)
+                         ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  Django Web Server                            │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ Views (views_simple.py)                                │  │
+│  │ - dashboard_simple()     ← แสดงหน้า Dashboard         │  │
+│  │ - control_led()          ← ควบคุม LED                │  │
+│  │ - control_relay()        ← ควบคุม RELAY              │  │
+│  │ - api_sensor_data()      ← ส่งข้อมูล sensor          │  │
+│  └────────────────────────────────────────────────────────┘  │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ Models (models.py)                                     │  │
+│  │ - Device              ← สถานะ LED                     │  │
+│  │ - Relay               ← สถานะ RELAY 1,2,3             │  │
+│  │ - SensorData          ← ข้อมูล Temperature/Humidity   │  │
+│  └────────────────────────────────────────────────────────┘  │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ MQTT Manager (mqtt_manager.py)                         │  │
+│  │ - Persistent Connection  ← เชื่อมต่อค้างไว้           │  │
+│  │ - Auto-reconnect        ← เชื่อมต่อใหม่อัตโนมัติ      │  │
+│  │ - send_led_command()    ← ส่งคำสั่ง LED              │  │
+│  │ - send_relay_command()  ← ส่งคำสั่ง RELAY            │  │
+│  └────────────────────────────────────────────────────────┘  │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ MQTT Callbacks (mqtt_callbacks.py)                     │  │
+│  │ - handle_relay_state_message()     ← รับสถานะ RELAY  │  │
+│  │ - handle_sensor_data_message()     ← รับข้อมูล Sensor│  │
+│  │ - handle_led_status_message()      ← รับสถานะ LED    │  │
+│  └────────────────────────────────────────────────────────┘  │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ SQLite Database (db.sqlite3)                           │  │
+│  │ - iot_dashboard_device      ← ตาราง LED              │  │
+│  │ - iot_dashboard_relay       ← ตาราง RELAY            │  │
+│  │ - iot_dashboard_sensordata  ← ตาราง Sensor Data      │  │
+│  └────────────────────────────────────────────────────────┘  │
+└────────────────────────┬─────────────────────────────────────┘
+                         │ MQTT Protocol (Port 1883)
+                         ▼
+┌──────────────────────────────────────────────────────────────┐
+│              MQTT Broker (broker.hivemq.com)                  │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ Control Topics (Subscribe)                             │  │
+│  │ • thaitechzone/v2_board/control/led                   │  │
+│  │ • thaitechzone/v2_board/control/relay1                │  │
+│  │ • thaitechzone/v2_board/control/relay2                │  │
+│  │ • thaitechzone/v2_board/control/relay3                │  │
+│  └────────────────────────────────────────────────────────┘  │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ State Topics (Publish)                                 │  │
+│  │ • thaitechzone/v2_board/state/led                     │  │
+│  │ • thaitechzone/v2_board/state/relay1                  │  │
+│  │ • thaitechzone/v2_board/state/relay2                  │  │
+│  │ • thaitechzone/v2_board/state/relay3                  │  │
+│  │ • thaitechzone/v2_board/sensor/data                   │  │
+│  └────────────────────────────────────────────────────────┘  │
+└────────────────────────┬─────────────────────────────────────┘
+                         │ WiFi + MQTT
+                         ▼
+┌──────────────────────────────────────────────────────────────┐
+│                      ESP32 Board                              │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ Arduino Code (.ino)                                    │  │
+│  │ - WiFi Connection        ← เชื่อมต่อ WiFi             │  │
+│  │ - MQTT Client            ← เชื่อมต่อ MQTT Broker      │  │
+│  │ - mqttCallback()         ← รับคำสั่งจาก Dashboard    │  │
+│  │ - publishRelayState()    ← ส่งสถานะ RELAY กลับ       │  │
+│  │ - publishSensorData()    ← ส่งข้อมูล Sensor          │  │
+│  └────────────────────────────────────────────────────────┘  │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ Hardware Components                                    │  │
+│  │ - LED (GPIO 2)          ← หลอด LED ในตัว             │  │
+│  │ - RELAY 1 (GPIO 25)     ← รีเลย์ช่องที่ 1            │  │
+│  │ - RELAY 2 (GPIO 26)     ← รีเลย์ช่องที่ 2            │  │
+│  │ - RELAY 3 (GPIO 27)     ← รีเลย์ช่องที่ 3            │  │
+│  │ - DHT22 (GPIO 4)        ← เซนเซอร์อุณหภูมิ/ความชื้น  │  │
+│  └────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-### 📡 MQTT Topics ที่ใช้:
-- **`thaitechzone/v2_board/control/led`** - ส่งคำสั่งควบคุม (ON/OFF)
-- **`thaitechzone/v2_board/state/led`** - รับสถานะจาก ESP32
-- **`thaitechzone/v2_board/feedback/led`** - รับการตอบกลับ
+### � ขั้นตอนการทำงาน:
+
+#### 1. เมื่อผู้ใช้กดปุ่ม "Turn ON" บน Dashboard:
+```
+1. User กดปุ่ม → JavaScript ส่ง HTTP POST
+2. Django รับ request → views_simple.control_relay()
+3. Django เรียก send_relay_command(relay_num, 'ON')
+4. MQTT Manager ส่งคำสั่ง → MQTT Broker
+5. ESP32 รับคำสั่ง → mqttCallback()
+6. ESP32 เปิด RELAY → digitalWrite(RELAY_PIN, HIGH)
+7. ESP32 ส่ง State กลับ → publishRelayState()
+8. Django รับ State → handle_relay_state_message()
+9. อัปเดต Database → relay.relay1_status = True
+10. Dashboard รีเฟรช → แสดงสถานะใหม่
+```
+
+#### 2. เมื่อ ESP32 ส่งข้อมูล Sensor:
+```
+1. DHT22 อ่านค่า → dht.readTemperature()
+2. ESP32 ส่งข้อมูล → publishSensorData()
+3. MQTT Broker รับข้อมูล
+4. Django รับข้อมูล → handle_sensor_data_message()
+5. สร้างข้อมูลใหม่ → SensorData.objects.create()
+6. บันทึกลง Database
+7. Dashboard รีเฟรช → ดึงข้อมูลใหม่
+8. แสดงบนกราฟและตาราง
+```
 
 ---
 
@@ -230,71 +368,293 @@ python manage.py createsuperuser
 
 ## 🏃‍♂️ การรันระบบ
 
+### 🎯 วิธีที่ 1: ใช้ Batch Scripts (Windows) - แนะนำ! ⭐
+
+สำหรับผู้ใช้ Windows เราได้เตรียม **คำสั่งสำเร็จรูป** ที่ใช้งานง่าย **แค่ Double Click!**
+
+#### 📂 ไฟล์ที่มีให้ใช้งาน:
+
+| ไฟล์ | คำอธิบาย | การใช้งาน |
+|------|----------|-----------|
+| **`setup.bat`** | ติดตั้งระบบครั้งแรก | ใช้ครั้งเดียวตอนเริ่มต้น |
+| **`start_all.bat`** | รันทุกอย่างพร้อมกัน | ✅ **ใช้อันนี้ทุกครั้ง** |
+| **`start_server.bat`** | รัน Django Server อย่างเดียว | เมื่อต้องการแค่ Web |
+| **`start_mqtt.bat`** | รัน MQTT Listener | ทดสอบ MQTT แยก |
+| **`stop_all.bat`** | หยุดทุก process | หยุดระบบทั้งหมด |
+| **`check_status.bat`** | ตรวจสอบสถานะ | ดูว่าติดตั้งครบหรือยัง |
+
+#### 🚀 ขั้นตอนการใช้งาน:
+
+**ครั้งแรก (First Time Setup):**
+```cmd
+1. Double Click:  setup.bat
+   (รอติดตั้ง Virtual Environment + Django + paho-mqtt + Database)
+
+2. Double Click:  start_all.bat
+   (เปิด Django Server + MQTT Listener พร้อมกัน)
+
+3. เปิด Browser ไปที่:
+   http://127.0.0.1:8000/
+```
+
+**ใช้งานปกติ (Daily Use):**
+```cmd
+1. Double Click:  start_all.bat
+
+2. เปิด Browser ไปที่:
+   http://127.0.0.1:8000/
+```
+
+**หยุดการทำงาน:**
+```cmd
+กด Ctrl+C ใน window "Django Web Server"
+หรือ Double Click:  stop_all.bat
+```
+
+#### ✨ Features ของ Batch Scripts:
+
+- ✅ **Auto-check** ทุกอย่าง (Python, venv, Django, Database)
+- ✅ **Auto-install** dependencies ถ้ายังไม่มี
+- ✅ **Auto-migrate** database ถ้ายังไม่มี
+- ✅ **Error handling** แจ้งเตือนชัดเจนเป็นภาษาไทย
+- ✅ **เปิด Window แยก** สำหรับ Django Server
+- ✅ **MQTT อัตโนมัติ** ทำงาน background ผ่าน Django Apps
+- ✅ **ใช้งานง่าย** แค่ Double Click!
+
+#### 📝 ตัวอย่างผลลัพธ์จาก start_all.bat:
+
+```
+================================================
+  Django IoT Dashboard - Starting All Services
+================================================
+
+[INFO] กำลังเตรียมระบบ...
+
+[1/2] เปิด Django Web Server...
+[2/2] MQTT Listener จะเริ่มทำงานอัตโนมัติ
+     (ผ่าน iot_dashboard/apps.py)
+
+================================================
+  ✓ ระบบพร้อมใช้งานแล้ว!
+================================================
+
+📌 เปิด Web Browser ไปที่:
+   http://127.0.0.1:8000/
+   http://localhost:8000/
+
+📌 MQTT Listener:
+   ทำงานใน Background อัตโนมัติ
+   Broker: broker.hivemq.com:1883
+
+📌 การหยุดระบบ:
+   ปิด window "Django Web Server"
+   หรือกด Ctrl+C ใน window นั้น
+```
+
+#### 🔍 ตรวจสอบสถานะด้วย check_status.bat:
+
+```cmd
+Double Click:  check_status.bat
+```
+
+**ผลลัพธ์:**
+```
+================================================
+  Django IoT Dashboard - System Status
+================================================
+
+[1/5] Python Installation:
+[✓] Python พร้อมใช้งาน
+Python 3.11.5
+
+[2/5] Virtual Environment:
+[✓] Virtual Environment พร้อมใช้งาน
+    Path: venv\
+
+[3/5] Python Packages:
+[✓] Django version: 5.2.7
+[✓] paho-mqtt ติดตั้งแล้ว
+
+[4/5] Database:
+[✓] Database พร้อมใช้งาน
+    File: db.sqlite3
+
+[5/5] Django Server Status:
+[✓] Django Server กำลังทำงาน
+    URL: http://127.0.0.1:8000/
+    PID: 12345
+```
+
+> 📖 **อ่านเอกสารเพิ่มเติม:** [QUICK_START_WINDOWS.md](QUICK_START_WINDOWS.md) - คู่มือการใช้งานแบบเต็ม
+
+---
+
+### 🎯 วิธีที่ 2: ใช้ Command Line (Windows/Linux/Mac)
+
 เพื่อให้ระบบทำงานได้เต็มรูปแบบ คุณต้องเปิดใช้งาน **2 processes** พร้อมกัน:
 
-### Terminal 1: Django Web Server
+#### Terminal 1: Django Web Server
 
+**Windows CMD:**
+```cmd
+# เข้าไปในโฟลเดอร์โปรเจกต์
+cd DjangoDashboardFramework\django_iot_dashboard
+
+# เปิดใช้งาน virtual environment
+venv\Scripts\activate
+
+# รัน Django server
+python manage.py runserver
+```
+
+**Windows PowerShell:**
+```powershell
+# เข้าไปในโฟลเดอร์โปรเจกต์
+cd DjangoDashboardFramework\django_iot_dashboard
+
+# เปิดใช้งาน virtual environment
+.\venv\Scripts\Activate.ps1
+
+# ถ้าเจอ Error: Execution Policy
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# รัน Django server
+python manage.py runserver
+```
+
+**Linux/Mac:**
 ```bash
 # เข้าไปในโฟลเดอร์โปรเจกต์
 cd DjangoDashboardFramework/django_iot_dashboard
 
 # เปิดใช้งาน virtual environment
-# Windows:
-.\venv\Scripts\activate
-# macOS/Linux:
 source venv/bin/activate
 
 # รัน Django server
 python manage.py runserver
 ```
 
-**✅ ผลลัพธ์ที่ดี:**
+**✅ ผลลัพธ์ที่คาดหวัง:**
 ```
 Watching for file changes with StatReloader
 Performing system checks...
 
 System check identified no issues (0 silenced).
-October 18, 2025 - 15:30:00
+October 19, 2025 - 17:48:45
 Django version 5.2.7, using settings 'dashboard_project.settings'
 Starting development server at http://127.0.0.1:8000/
 Quit the server with CTRL-BREAK.
 ```
 
-### Terminal 2: MQTT Listener
+#### Terminal 2: MQTT Listener (Optional)
 
 **เปิด Terminal/Command Prompt ใหม่:**
 
+**Windows CMD:**
+```cmd
+# เข้าไปในโฟลเดอร์โปรเจกต์
+cd DjangoDashboardFramework\django_iot_dashboard
+
+# เปิดใช้งาน virtual environment
+venv\Scripts\activate
+
+# Test MQTT Connection (Optional)
+python -c "from iot_dashboard.mqtt_manager import MQTTManager; m = MQTTManager(); print('MQTT Status:', m.get_status())"
+```
+
+**Linux/Mac:**
 ```bash
 # เข้าไปในโฟลเดอร์โปรเจกต์
 cd DjangoDashboardFramework/django_iot_dashboard
 
 # เปิดใช้งาน virtual environment
-# Windows:
-.\venv\Scripts\activate
-# macOS/Linux:
 source venv/bin/activate
 
-# รัน MQTT listener
-python manage.py mqtt_listener
+# Test MQTT Connection (Optional)
+python -c "from iot_dashboard.mqtt_manager import MQTTManager; m = MQTTManager(); print('MQTT Status:', m.get_status())"
 ```
 
-**✅ ผลลัพธ์ที่ดี:**
+**📝 หมายเหตุ:**
+- MQTT Listener จะทำงาน **อัตโนมัติใน background** ผ่าน `iot_dashboard/apps.py`
+- ไม่จำเป็นต้องรัน Terminal แยก สำหรับ MQTT
+- Django Server เดียวจัดการทุกอย่างได้
+
+#### การทดสอบ MQTT:
+
+เมื่อ Django Server ทำงาน จะเห็นข้อความในคอนโซล:
 ```
-🚀 Starting MQTT Listener for IoT Dashboard...
-🌐 Broker: broker.hivemq.com:1883
-==================================================
-🔄 Connecting to broker.hivemq.com...
-✅ MQTT listener started successfully!
-📱 Ready to receive messages from ESP32...
-🛑 Press Ctrl+C to stop
-✅ Connected to MQTT Broker successfully!
-📡 Subscribed to topics:
-   • thaitechzone/v2_board/state/led
-   • thaitechzone/v2_board/feedback/led
-✅ Subscription confirmed with QoS: (1,)
+System check identified no issues (0 silenced).
+October 19, 2025 - 17:48:45
+Django version 5.2.7, using settings 'dashboard_project.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+[INFO] MQTT Manager initialized
+[INFO] Connecting to MQTT Broker: broker.hivemq.com:1883
+[INFO] MQTT Connected successfully!
+[INFO] Subscribed to topics:
+  - thaitechzone/v2_board/control/led
+  - thaitechzone/v2_board/control/relay1
+  - thaitechzone/v2_board/control/relay2
+  - thaitechzone/v2_board/control/relay3
+  - thaitechzone/v2_board/state/led
+  - thaitechzone/v2_board/state/relay1
+  - thaitechzone/v2_board/state/relay2
+  - thaitechzone/v2_board/state/relay3
+  - thaitechzone/v2_board/sensor/data
 ```
 
-### ขั้นตอนที่ 3: เปิด Dashboard
+---
+
+### 📱 เปิด Dashboard
+
+1. **เปิดเบราว์เซอร์** (Chrome, Firefox, Edge)
+2. **ไปที่ URL:**
+   - http://127.0.0.1:8000/
+   - http://localhost:8000/
+
+3. **ควรเห็นหน้า Dashboard ประกอบด้วย:**
+   - ✅ **Current Time** - เวลาไทยปัจจุบัน (UTC+7)
+   - ✅ **LED Control Card** - ปุ่มเปิด/ปิด LED
+   - ✅ **RELAY Control (3 ช่อง)** - ปุ่มควบคุม RELAY แยกอิสระ
+   - ✅ **Temperature Card** - แสดงอุณหภูมิล่าสุด
+   - ✅ **Humidity Card** - แสดงความชื้นล่าสุด
+   - ✅ **Temperature Chart** - กราฟอุณหภูมิ
+   - ✅ **Humidity Chart** - กราฟความชื้น
+   - ✅ **Recent Readings Table** - ตารางข้อมูล 10 รายการล่าสุด
+
+4. **ทดสอบการทำงาน:**
+   - กดปุ่ม "Turn ON" หรือ "Turn OFF" → ควรเห็นข้อความ Success
+   - รอ 2-5 วินาที → Dashboard จะ auto-refresh แสดงสถานะใหม่
+   - ถ้ามี ESP32 เชื่อมต่อ → LED/RELAY จะทำงานตามคำสั่ง
+
+---
+
+### 🔴 การหยุดระบบ
+
+**Windows (Batch Scripts):**
+```cmd
+Double Click:  stop_all.bat
+```
+
+**Command Line (ทุก OS):**
+```cmd
+# ใน Terminal ที่รัน Django Server
+กด Ctrl + C
+
+# หรือดู Port และหยุด process
+# Windows:
+netstat -ano | findstr :8000
+taskkill /F /PID <process_id>
+
+# Linux/Mac:
+lsof -ti:8000 | xargs kill -9
+```
+
+**หยุดแบบปกติ:**
+- กด `Ctrl + C` ใน Terminal ที่รัน Django
+- ปิดหน้าต่าง Terminal/CMD
+- ปิด Browser Tab
 
 1. เปิดเบราว์เซอร์ (Chrome, Firefox, Edge)
 2. ไปที่: `http://127.0.0.1:8000/` หรือ `http://localhost:8000/`
