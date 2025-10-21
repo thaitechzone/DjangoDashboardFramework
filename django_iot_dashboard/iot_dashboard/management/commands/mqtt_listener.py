@@ -7,15 +7,15 @@ from iot_dashboard.models import Device, SensorData
 # --- Configuration ---
 MQTT_BROKER = "broker.hivemq.com"
 MQTT_PORT = 1883
-LED_STATUS_TOPIC = "thaitechzone/v2_board/state/led"  # ESP32 ส่งสถานะมา
-LED_CONTROL_TOPIC = "thaitechzone/v2_board/control/led"  # เราส่งคำสั่งไป
-LED_FEEDBACK_TOPIC = "thaitechzone/v2_board/feedback/led"  # ESP32 ตอบกลับ
-SENSOR_DATA_TOPIC = "thaitechzone/v2_board/sensor/data"  # ESP32 ส่งข้อมูล sensor (แก้จาก sensors → sensor)
+LED_STATUS_TOPIC = "thaitechzone/v2_board1/state/led"  # ESP32 ส่งสถานะมา
+LED_CONTROL_TOPIC = "thaitechzone/v2_board1/control/led"  # เราส่งคำสั่งไป
+LED_FEEDBACK_TOPIC = "thaitechzone/v2_board1/feedback/led"  # ESP32 ตอบกลับ
+SENSOR_DATA_TOPIC = "thaitechzone/v2_board1/sensor/data"  # ESP32 ส่งข้อมูล sensor (แก้จาก sensors → sensor)
 
 # RELAY Topics
-RELAY1_STATE_TOPIC = "thaitechzone/v2_board/state/relay1"
-RELAY2_STATE_TOPIC = "thaitechzone/v2_board/state/relay2"
-RELAY3_STATE_TOPIC = "thaitechzone/v2_board/state/relay3"
+RELAY1_STATE_TOPIC = "thaitechzone/v2_board1/state/relay1"
+RELAY2_STATE_TOPIC = "thaitechzone/v2_board1/state/relay2"
+RELAY3_STATE_TOPIC = "thaitechzone/v2_board1/state/relay3"
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:

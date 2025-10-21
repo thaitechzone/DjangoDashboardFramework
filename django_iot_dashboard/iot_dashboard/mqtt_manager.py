@@ -45,22 +45,22 @@ class MQTTManager:
         self.MQTT_PORT = 1883
         
         # LED Topics
-        self.LED_CONTROL_TOPIC = "thaitechzone/v2_board/control/led"
-        self.LED_STATUS_TOPIC = "thaitechzone/v2_board/status/led"
-        
+        self.LED_CONTROL_TOPIC = "thaitechzone/v2_board1/control/led"
+        self.LED_STATUS_TOPIC = "thaitechzone/v2_board1/status/led"
+
         # RELAY Control Topics (Dashboard → ESP32)
-        self.RELAY1_CONTROL_TOPIC = "thaitechzone/v2_board/control/relay1"
-        self.RELAY2_CONTROL_TOPIC = "thaitechzone/v2_board/control/relay2"
-        self.RELAY3_CONTROL_TOPIC = "thaitechzone/v2_board/control/relay3"
-        
+        self.RELAY1_CONTROL_TOPIC = "thaitechzone/v2_board1/control/relay1"
+        self.RELAY2_CONTROL_TOPIC = "thaitechzone/v2_board1/control/relay2"
+        self.RELAY3_CONTROL_TOPIC = "thaitechzone/v2_board1/control/relay3"
+
         # RELAY State Topics (ESP32 → Dashboard)
-        self.RELAY1_STATE_TOPIC = "thaitechzone/v2_board/state/relay1"
-        self.RELAY2_STATE_TOPIC = "thaitechzone/v2_board/state/relay2"
-        self.RELAY3_STATE_TOPIC = "thaitechzone/v2_board/state/relay3"
-        
+        self.RELAY1_STATE_TOPIC = "thaitechzone/v2_board1/state/relay1"
+        self.RELAY2_STATE_TOPIC = "thaitechzone/v2_board1/state/relay2"
+        self.RELAY3_STATE_TOPIC = "thaitechzone/v2_board1/state/relay3"
+
         # Sensor Data Topic
-        self.SENSOR_DATA_TOPIC = "thaitechzone/v2_board/sensor/data"
-        
+        self.SENSOR_DATA_TOPIC = "thaitechzone/v2_board1/sensor/data"
+
         # สถานะการเชื่อมต่อ
         self.is_connected = False
         self.is_connecting = False
