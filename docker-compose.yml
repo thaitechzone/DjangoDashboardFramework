@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  # Django Web Application
+  web:
+    build: .
+    container_name: django_iot_dashboard
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./django_iot_dashboard:/app
+      - sqlite_data:/app/db
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DJANGO_SETTINGS_MODULE=dashboard_project.settings
+    restart: unless-stopped
+    networks:
+      - iot_network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  sqlite_data:
+    driver: local
+
+networks:
+  iot_network:
+    driver: bridge

@@ -501,7 +501,7 @@ Python 3.11.5
 cd DjangoDashboardFramework\django_iot_dashboard
 
 # เปิดใช้งาน virtual environment
-venv\Scripts\activate
+.\venv\Scripts\activate.bat
 
 # รัน Django server
 python manage.py runserver
@@ -546,20 +546,31 @@ Starting development server at http://127.0.0.1:8000/
 Quit the server with CTRL-BREAK.
 ```
 
-#### Terminal 2: MQTT Listener (Optional)
+#### Terminal 2: MQTT Listener (Optional - สำหรับ Debug)
+
+> 💡 **หมายเหตุ:** MQTT จะทำงาน**อัตโนมัติ**ผ่าน Django Server แล้ว  
+> ใช้ตัวเลือกนี้**เฉพาะเมื่อต้องการ debug** และดู log แบบละเอียด
 
 **เปิด Terminal/Command Prompt ใหม่:**
 
-**Windows CMD:**
+**Windows (ใช้ Batch Script - แนะนำ):**
+```cmd
+Double Click:  start_mqtt.bat
+```
+
+**Windows (Command Line):**
 ```cmd
 # เข้าไปในโฟลเดอร์โปรเจกต์
 cd DjangoDashboardFramework\django_iot_dashboard
 
 # เปิดใช้งาน virtual environment
-venv\Scripts\activate
+.\venv\Scripts\activate.bat
 
-# Test MQTT Connection (Optional)
-python -c "from iot_dashboard.mqtt_manager import MQTTManager; m = MQTTManager(); print('MQTT Status:', m.get_status())"
+# รัน MQTT Listener
+python manage.py mqtt_listener
+
+# หรือแบบ verbose (แสดง debug ละเอียด)
+python manage.py mqtt_listener --verbose
 ```
 
 **Linux/Mac:**
@@ -570,18 +581,109 @@ cd DjangoDashboardFramework/django_iot_dashboard
 # เปิดใช้งาน virtual environment
 source venv/bin/activate
 
-# Test MQTT Connection (Optional)
+# รัน MQTT Listener
+python manage.py mqtt_listener
+
+# หรือแบบ verbose
+python manage.py mqtt_listener --verbose
+```
+
+**✅ ผลลัพธ์ที่คาดหวัง (start_mqtt.bat หรือ management command):**
+```
+========================================
+  MQTT Listener กำลังทำงาน
+  Broker: broker.hivemq.com:1883
+========================================
+
+🚀 Starting MQTT Listener for IoT Dashboard...
+🌐 Broker: broker.hivemq.com:1883
+==================================================
+🔄 Connecting to broker.hivemq.com...
+✅ Connected to MQTT Broker successfully!
+📡 Subscribed to topics:
+   • thaitechzone/v2_board/state/led
+   • thaitechzone/v2_board/feedback/led
+   • thaitechzone/v2_board/sensor/data          ← รับข้อมูล Temp/Hum
+   • thaitechzone/v2_board/state/relay1
+   • thaitechzone/v2_board/state/relay2
+   • thaitechzone/v2_board/state/relay3
+
+✅ MQTT listener started successfully!
+📱 Ready to receive messages from ESP32...
+🛑 Press Ctrl+C to stop
+```
+
+**เมื่อรับข้อมูล Sensor จะแสดง:**
+```
+[2025-10-19 20:15:30] 📨 Message Received:
+  Topic: thaitechzone/v2_board/sensor/data
+  Payload: {"temperature": 28.5, "humidity": 65.2}
+  
+  📊 Parsed JSON data:
+     Temperature: 28.5°C
+     Humidity: 65.2%
+     
+🌡️  Temperature: 28.5°C
+💧 Humidity: 65.2%
+✅ Sensor data saved to database (ID: 45)
+📊 Total sensor records in database: 45
+```
+
+**🧪 ทดสอบการรับข้อมูล:**
+
+หากต้องการทดสอบว่า MQTT Listener รับข้อมูลได้:
+
+```cmd
+# Terminal 1: รัน MQTT Listener
+start_mqtt.bat
+
+# Terminal 2: ส่งข้อมูลทดสอบ
+test_send_sensor.bat
+
+# หรือใช้ Python script
+python test_mqtt_sender.py
+```
+
+> 📖 **อ่านเพิ่มเติม:**  
+> - [MQTT_LISTENER_QUICK_GUIDE.md](MQTT_LISTENER_QUICK_GUIDE.md) - คู่มือ MQTT Listener  
+> - [FIX_MQTT_LISTENER_SENSOR_DATA.md](FIX_MQTT_LISTENER_SENSOR_DATA.md) - แก้ปัญหา MQTT
+
+---
+
+#### การเลือกใช้งาน MQTT:
+
+| วิธี | เมื่อไหร่ใช้ | ข้อดี | ข้อเสี่ย |
+|------|-------------|-------|---------|
+| **Django Server อย่างเดียว**<br>`start_server.bat` | ใช้งานปกติ ⭐ | • ง่าย แค่ 1 window<br>• MQTT ทำงานอัตโนมัติ | • ไม่เห็น MQTT log |
+| **MQTT Listener แยก**<br>`start_mqtt.bat` | Debug/ทดสอบ 🔍 | • เห็น log ทุกข้อความ<br>• Debug ได้ละเอียด | • ต้องเปิด 2 windows |
+| **ทั้งสองพร้อมกัน**<br>`start_all.bat` | พัฒนา/ดู log 🛠️ | • Server + Log ครบ<br>• เหมาะ development | • ใช้ resource มาก |
+
+**📝 สรุป:**
+- **ใช้งานทั่วไป:** รัน `start_server.bat` หรือ `start_all.bat` เท่านั้น
+- **Debug MQTT:** รัน `start_mqtt.bat` แยกเพื่อดู log
+- **ทดสอบ:** ใช้ `test_send_sensor.bat` หรือ `test_mqtt_sender.py`
+
+---
+
+#### การทดสอบ MQTT (ถ้าไม่ใช้ management command):
+
+**Test MQTT Connection:**
+```cmd
+# Windows:
+python -c "from iot_dashboard.mqtt_manager import MQTTManager; m = MQTTManager(); print('MQTT Status:', m.get_status())"
+
+# Linux/Mac:
 python -c "from iot_dashboard.mqtt_manager import MQTTManager; m = MQTTManager(); print('MQTT Status:', m.get_status())"
 ```
 
 **📝 หมายเหตุ:**
 - MQTT Listener จะทำงาน **อัตโนมัติใน background** ผ่าน `iot_dashboard/apps.py`
-- ไม่จำเป็นต้องรัน Terminal แยก สำหรับ MQTT
+- ไม่จำเป็นต้องรัน Terminal แยก สำหรับการใช้งานปกติ
 - Django Server เดียวจัดการทุกอย่างได้
 
-#### การทดสอบ MQTT:
+#### เมื่อ Django Server ทำงาน (MQTT อัตโนมัติ):
 
-เมื่อ Django Server ทำงาน จะเห็นข้อความในคอนโซล:
+จะเห็นข้อความในคอนโซล:
 ```
 System check identified no issues (0 silenced).
 October 19, 2025 - 17:48:45
@@ -923,22 +1025,72 @@ void loop() {
 2. หน้าเว็บควรอัปเดตทุก 2 วินาที
 3. เวลาการอัปเดตล่าสุดควรเปลี่ยนไป
 
-### Test Case 3: ทดสอบด้วย MQTT Explorer (ถ้ามี)
+### Test Case 3: ทดสอบ MQTT Listener
+
+1. **รัน MQTT Listener แยก:**
+   ```cmd
+   Double Click: start_mqtt.bat
+   ```
+
+2. **ส่งข้อมูลทดสอบ:**
+   ```cmd
+   Double Click: test_send_sensor.bat
+   ```
+
+3. **ควรเห็นใน MQTT Listener:**
+   ```
+   [2025-10-19 20:15:30] 📨 Message Received:
+     Topic: thaitechzone/v2_board/sensor/data
+     Payload: {"temperature": 28.5, "humidity": 65.2}
+   
+   🌡️  Temperature: 28.5°C
+   💧 Humidity: 65.2%
+   ✅ Sensor data saved to database (ID: 45)
+   ```
+
+4. **เช็ค Dashboard:**
+   - Temperature Card ควรแสดง 28.5°C
+   - Humidity Card ควรแสดง 65.2%
+   - กราฟควรอัปเดต
+   - Recent Readings Table ควรมีข้อมูลใหม่
+
+### Test Case 4: ทดสอบ RELAY Control
+
+1. **กดปุ่ม RELAY 1 "Turn ON"**
+   - RELAY 1 บน ESP32 ควรทำงาน
+   - สถานะบนหน้าเว็บเป็น "🟢 ON"
+   - ถ้ารัน MQTT Listener จะเห็น log
+
+2. **ทดสอบ RELAY 2 และ 3** เหมือนกัน
+
+3. **ทดสอบปุ่ม Toggle:**
+   - กดปุ่ม "Toggle" หลายครั้ง
+   - สถานะควรสลับ ON/OFF
+
+### Test Case 5: ทดสอบด้วย MQTT Explorer (Advanced)
 
 1. **ดาวน์โหลด MQTT Explorer** จาก [mqtt-explorer.com](http://mqtt-explorer.com/)
 2. **เชื่อมต่อ** ไปที่ `broker.hivemq.com:1883`
-3. **ส่งคำสั่ง:**
+3. **ส่งคำสั่ง LED:**
    - Topic: `thaitechzone/v2_board/control/led`
    - Message: `ON` หรือ `OFF`
-4. **ดูการตอบกลับ:**
+4. **ส่งคำสั่ง RELAY:**
+   - Topic: `thaitechzone/v2_board/control/relay1`
+   - Message: `ON`, `OFF`, หรือ `TOGGLE`
+5. **ส่งข้อมูล Sensor:**
+   - Topic: `thaitechzone/v2_board/sensor/data`
+   - Message: `{"temperature": 30.5, "humidity": 70.2}`
+6. **ดูการตอบกลับ:**
    - Topic: `thaitechzone/v2_board/state/led`
-   - Topic: `thaitechzone/v2_board/feedback/led`
+   - Topic: `thaitechzone/v2_board/state/relay[1,2,3]`
 
 ---
 
 ## ⚠️ การแก้ไขปัญหาที่พบบ่อย
 
-### ❌ ปัญหา: "ModuleNotFoundError: No module named 'django'"
+### 🐍 ปัญหา Python และ Dependencies
+
+#### ❌ "ModuleNotFoundError: No module named 'django'"
 
 **สาเหตุ:** ไม่ได้เปิดใช้งาน virtual environment
 
@@ -954,16 +1106,16 @@ source venv/bin/activate
 pip list | grep -i django
 ```
 
-### ❌ ปัญหา: "ModuleNotFoundError: No module named 'paho'"
+#### ❌ "ModuleNotFoundError: No module named 'paho'"
 
 **สาเหตุ:** ไม่ได้ติดตั้ง paho-mqtt
 
 **วิธีแก้:**
 ```bash
-pip install paho-mqtt
+pip install paho-mqtt==2.1.0
 ```
 
-### ❌ ปัญหา: "manage.py: command not found"
+#### ❌ "manage.py: command not found"
 
 **สาเหตุ:** อยู่ในโฟลเดอร์ผิด
 
@@ -977,7 +1129,24 @@ dir manage.py    # Windows
 cd DjangoDashboardFramework/django_iot_dashboard
 ```
 
-### ❌ ปัญหา: ESP32 ไม่เชื่อมต่อ WiFi
+#### ❌ "python ไม่เป็นที่รู้จักคำสั่ง"
+
+**วิธีแก้:**
+```cmd
+# ลอง py แทน python
+py --version
+py -m venv venv
+py manage.py runserver
+
+# หรือเพิ่ม Python เข้า PATH
+# ติดตั้ง Python ใหม่ และติ๊กถูก "Add Python to PATH"
+```
+
+---
+
+### 🌐 ปัญหา ESP32 และการเชื่อมต่อ
+
+#### ❌ ESP32 ไม่เชื่อมต่อ WiFi
 
 **ตรวจสอบ:**
 1. ชื่อและรหัสผ่าน WiFi ถูกต้องหรือไม่
@@ -986,12 +1155,14 @@ cd DjangoDashboardFramework/django_iot_dashboard
 
 **วิธีแก้:**
 ```cpp
-// เพิ่มการ debug
+// เพิ่มการ debug ใน ESP32 code
 Serial.println("WiFi SSID: " + String(ssid));
 Serial.println("WiFi Status: " + String(WiFi.status()));
+Serial.print("Signal Strength: ");
+Serial.println(WiFi.RSSI());
 ```
 
-### ❌ ปัญหา: ESP32 เชื่อมต่อ WiFi ได้แต่ MQTT ไม่ได้
+#### ❌ ESP32 เชื่อมต่อ WiFi ได้แต่ MQTT ไม่ได้
 
 **ตรวจสอบ:**
 1. อินเทอร์เน็ตทำงานหรือไม่
@@ -1000,44 +1171,458 @@ Serial.println("WiFi Status: " + String(WiFi.status()));
 
 **วิธีแก้:**
 ```cpp
-// ทดสอบการ ping
-Serial.println("Testing internet connection...");
-WiFiClient testClient;
-if (testClient.connect("google.com", 80)) {
-  Serial.println("Internet OK");
-  testClient.stop();
+// ตรวจสอบการเชื่อมต่อ MQTT
+Serial.print("Connecting to MQTT broker: ");
+Serial.println(mqtt_server);
+if (client.connect(mqtt_client_id)) {
+    Serial.println("✓ MQTT Connected!");
+} else {
+    Serial.print("✗ MQTT Failed, rc=");
+    Serial.println(client.state());
 }
 ```
 
-### ❌ ปัญหา: Dashboard ไม่อัปเดต
+---
 
-**ตรวจสอบ:**
-1. MQTT Listener ทำงานหรือไม่
-2. Database มีการอัปเดตหรือไม่
-3. MQTT topics ถูกต้องหรือไม่
+### 📡 ปัญหา MQTT Listener
+
+#### ❌ start_mqtt.bat รันแล้วไม่รับข้อมูล Sensor
+
+**สาเหตุ:** Topic ไม่ตรงกัน
 
 **วิธีแก้:**
-```bash
-# ตรวจสอบ database
-python manage.py shell
->>> from iot_dashboard.models import Device
->>> Device.objects.all()
+1. **ตรวจสอบ Topic ใน ESP32:**
+   ```cpp
+   const char* SENSOR_DATA_TOPIC = "thaitechzone/v2_board/sensor/data";
+   // ไม่ใช่ "sensors/data" (ต้องไม่มี s)
+   ```
+
+2. **ทดสอบส่งข้อมูล:**
+   ```cmd
+   test_send_sensor.bat
+   ```
+
+3. **ดู Log แบบละเอียด:**
+   ```cmd
+   python manage.py mqtt_listener --verbose
+   ```
+
+4. **อ่านเอกสาร:**
+   - [FIX_MQTT_LISTENER_SENSOR_DATA.md](FIX_MQTT_LISTENER_SENSOR_DATA.md)
+   - [MQTT_LISTENER_QUICK_GUIDE.md](MQTT_LISTENER_QUICK_GUIDE.md)
+
+#### ❌ MQTT Listener ขึ้น "Connection Refused"
+
+**วิธีแก้:**
+```cmd
+# ตรวจสอบ Internet
+ping broker.hivemq.com
+
+# ตรวจสอบ Firewall
+# ปิด Firewall ชั่วคราว หรือ อนุญาต port 1883
+
+# ลองใช้ MQTT Broker อื่น (ถ้า HiveMQ ล่ม)
+# แก้ไขใน mqtt_manager.py:
+# MQTT_BROKER = "test.mosquitto.org"
 ```
 
-### ❌ ปัญหา: Port 8000 ถูกใช้งานอยู่
+---
+
+### 🖥️ ปัญหา Django Server
+
+#### ❌ Port 8000 ถูกใช้งานอยู่
 
 **วิธีแก้:**
-```bash
-# ใช้ port อื่น
-python manage.py runserver 8080
-
-# หรือหา process ที่ใช้ port 8000
-# Windows:
+```cmd
+# Windows: ดู process ที่ใช้ port 8000
 netstat -ano | findstr :8000
 
-# macOS/Linux:
-lsof -i :8000
+# ฆ่า process (แทน 12345 ด้วย PID จริง)
+taskkill /F /PID 12345
+
+# หรือใช้ port อื่น
+python manage.py runserver 8001
+
+# Linux/Mac:
+lsof -ti:8000 | xargs kill -9
 ```
+
+#### ❌ Database ไม่อัปเดต
+
+**วิธีแก้:**
+```cmd
+# ลบ database และสร้างใหม่
+del db.sqlite3   # Windows
+rm db.sqlite3    # Linux/Mac
+
+# Migrate ใหม่
+python manage.py makemigrations
+python manage.py migrate
+```
+
+---
+
+### 🔧 ปัญหา Batch Scripts (Windows)
+
+#### ❌ setup.bat ไม่ทำงาน
+
+**วิธีแก้:**
+```cmd
+# เปิด Command Prompt แบบ Administrator
+# คลิกขวา cmd.exe → Run as Administrator
+
+# หรือรันคำสั่งเอง:
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+python manage.py migrate
+```
+
+#### ❌ "Execution Policy" Error (PowerShell)
+
+**วิธีแก้:**
+```powershell
+# เปิด PowerShell แบบ Admin
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# หรือใช้ CMD แทน PowerShell
+```
+
+---
+
+### 🎨 ปัญหา Dashboard
+
+#### ❌ Dashboard ไม่แสดงข้อมูล Sensor
+
+**ตรวจสอบ:**
+1. ESP32 ส่งข้อมูลแล้วหรือยัง (ดูใน Serial Monitor)
+2. MQTT Listener รับข้อมูลหรือไม่ (รัน start_mqtt.bat)
+3. Database มีข้อมูลหรือไม่
+
+**วิธีแก้:**
+```cmd
+# ดูข้อมูลใน Database
+python manage.py shell
+
+>>> from iot_dashboard.models import SensorData
+>>> SensorData.objects.all().count()
+>>> SensorData.objects.latest('timestamp')
+>>> exit()
+
+# ถ้าไม่มีข้อมูล ส่งทดสอบ
+test_send_sensor.bat
+```
+
+#### ❌ เวลาไม่ถูกต้อง (ไม่ใช่เวลาไทย)
+
+**ตรวจสอบ:**
+```python
+# ใน settings.py
+TIME_ZONE = 'Asia/Bangkok'  # ต้องเป็น Asia/Bangkok
+USE_TZ = True                # ต้องเป็น True
+```
+
+**Clear cache:**
+```cmd
+# Restart Django Server
+Ctrl + C
+python manage.py runserver
+```
+
+---
+
+## 📚 เอกสารอ้างอิงและไฟล์สำคัญ
+
+### 📂 โครงสร้างโปรเจกต์
+
+```
+DjangoDashboardFramework/
+├── django_iot_dashboard/              ← โฟลเดอร์หลัก Django
+│   ├── manage.py                      ← Django management script
+│   ├── requirements.txt               ← Python dependencies
+│   ├── db.sqlite3                     ← Database (สร้างหลัง migrate)
+│   │
+│   ├── setup.bat                      ⭐ ติดตั้งระบบครั้งแรก
+│   ├── start_all.bat                  ⭐ รันทุกอย่างพร้อมกัน
+│   ├── start_server.bat               ⭐ รัน Django Server
+│   ├── start_mqtt.bat                 ⭐ รัน MQTT Listener (debug)
+│   ├── stop_all.bat                   ⭐ หยุดระบบ
+│   ├── check_status.bat               ⭐ ตรวจสอบสถานะ
+│   ├── test_send_sensor.bat           🧪 ทดสอบส่งข้อมูล sensor
+│   ├── test_mqtt_sender.py            🧪 ทดสอบ MQTT แบบละเอียด
+│   │
+│   ├── dashboard_project/             ← Django project settings
+│   │   ├── settings.py                ← การตั้งค่าหลัก
+│   │   ├── urls.py                    ← URL routing
+│   │   └── wsgi.py                    ← WSGI config
+│   │
+│   └── iot_dashboard/                 ← Django app หลัก
+│       ├── models.py                  ← Database models
+│       ├── views.py                   ← Views (complex)
+│       ├── views_simple.py            ⭐ Views (simple - ใช้งานจริง)
+│       ├── urls.py                    ← App URLs
+│       ├── apps.py                    ⭐ Auto-start MQTT
+│       ├── mqtt_manager.py            ⭐ MQTT Manager (Singleton)
+│       ├── mqtt_callbacks.py          ⭐ MQTT Callbacks
+│       │
+│       ├── templates/
+│       │   └── dashboard_simple.html  ⭐ Dashboard UI (ใช้งานจริง)
+│       │
+│       ├── management/                ← Django management commands
+│       │   └── commands/
+│       │       └── mqtt_listener.py   ⭐ MQTT Listener command
+│       │
+│       └── migrations/                ← Database migrations
+│
+├── QUICK_START_WINDOWS.md             📖 คู่มือเริ่มต้นฉบับเต็ม
+├── MQTT_LISTENER_QUICK_GUIDE.md       📖 คู่มือ MQTT Listener
+├── FIX_MQTT_LISTENER_SENSOR_DATA.md   📖 แก้ปัญหา MQTT
+├── RELAY_QUICK_START_GUIDE.md         📖 คู่มือ RELAY
+├── ESP32_RELAY_COMPLETE_CODE.ino      📝 โค้ด ESP32 ฉบับสมบูรณ์
+├── TIMEZONE_FIX_COMPLETE.md           📖 แก้ไขเวลาไทย
+└── README.md                          📖 เอกสารหลัก (ไฟล์นี้)
+```
+
+---
+
+### 🎯 ไฟล์ Batch Scripts สำหรับ Windows
+
+| ไฟล์ | วิธีใช้ | คำอธิบาย | ใช้เมื่อไหร่ |
+|------|---------|----------|-------------|
+| **setup.bat** | Double Click | ติดตั้ง venv + dependencies + database | ครั้งแรกที่โคลนโปรเจกต์ |
+| **start_all.bat** | Double Click | รัน Django + MQTT พร้อมกัน | ✅ แนะนำใช้ทุกครั้ง |
+| **start_server.bat** | Double Click | รัน Django Server อย่างเดียว | ใช้งาน Web อย่างเดียว |
+| **start_mqtt.bat** | Double Click | รัน MQTT Listener แยก | Debug/ดู MQTT log |
+| **stop_all.bat** | Double Click | หยุดทุก process | หยุดระบบทั้งหมด |
+| **check_status.bat** | Double Click | ตรวจสอบสถานะระบบ | เช็คว่าติดตั้งครบหรือยัง |
+| **test_send_sensor.bat** | Double Click | ส่งข้อมูล sensor ทดสอบ | ทดสอบว่า MQTT รับได้ |
+
+---
+
+### 📖 เอกสารประกอบ
+
+| เอกสาร | เนื้อหา | อ่านเมื่อไหร่ |
+|--------|---------|--------------|
+| **README.md** | เอกสารหลักแบบเต็ม | อ่านก่อนเริ่มโปรเจกต์ |
+| **QUICK_START_WINDOWS.md** | คู่มือใช้ Batch Scripts | ผู้ใช้ Windows |
+| **MQTT_LISTENER_QUICK_GUIDE.md** | คู่มือ MQTT Listener | เมื่อรัน MQTT แยก |
+| **FIX_MQTT_LISTENER_SENSOR_DATA.md** | แก้ปัญหา MQTT ไม่รับข้อมูล | มีปัญหา sensor data |
+| **RELAY_QUICK_START_GUIDE.md** | คู่มือใช้งาน RELAY | ควบคุม RELAY 3 ช่อง |
+| **TIMEZONE_FIX_COMPLETE.md** | แก้ไขเวลาไทย (UTC+7) | เวลาไม่ถูกต้อง |
+| **ESP32_RELAY_COMPLETE_CODE.ino** | โค้ด ESP32 ฉบับสมบูรณ์ | อัปโหลดลง ESP32 |
+
+---
+
+### 🔑 ไฟล์ Python สำคัญ
+
+| ไฟล์ | หน้าที่ | สำคัญ |
+|------|---------|-------|
+| **mqtt_manager.py** | MQTT Manager (Singleton pattern) | ⭐⭐⭐ |
+| **mqtt_callbacks.py** | Callback functions สำหรับ MQTT | ⭐⭐⭐ |
+| **views_simple.py** | Views สำหรับ Dashboard (ใช้งานจริง) | ⭐⭐⭐ |
+| **apps.py** | Auto-start MQTT เมื่อ Django เริ่มต้น | ⭐⭐⭐ |
+| **models.py** | Database models (Device, Relay, SensorData) | ⭐⭐ |
+| **mqtt_listener.py** | Management command สำหรับ MQTT | ⭐⭐ |
+| **dashboard_simple.html** | Template หน้า Dashboard | ⭐⭐ |
+
+---
+
+### 🎓 MQTT Topics ที่ใช้งาน
+
+#### Control Topics (ส่งคำสั่งจาก Dashboard → ESP32):
+```
+thaitechzone/v2_board/control/led       → เปิด/ปิด LED
+thaitechzone/v2_board/control/relay1    → ควบคุม RELAY 1
+thaitechzone/v2_board/control/relay2    → ควบคุม RELAY 2
+thaitechzone/v2_board/control/relay3    → ควบคุม RELAY 3
+```
+
+**Payload:** `ON`, `OFF`, หรือ `TOGGLE`
+
+#### State Topics (รับสถานะจาก ESP32 → Dashboard):
+```
+thaitechzone/v2_board/state/led         → สถานะ LED
+thaitechzone/v2_board/state/relay1      → สถานะ RELAY 1
+thaitechzone/v2_board/state/relay2      → สถานะ RELAY 2
+thaitechzone/v2_board/state/relay3      → สถานะ RELAY 3
+```
+
+**Payload:** `ON` หรือ `OFF`
+
+#### Sensor Topics (รับข้อมูลจาก ESP32 → Dashboard):
+```
+thaitechzone/v2_board/sensor/data       → ข้อมูล Temperature/Humidity
+```
+
+**Payload (JSON):**
+```json
+{
+  "temperature": 28.5,
+  "humidity": 65.2,
+  "device_name": "ESP32_DHT22"
+}
+```
+
+**หรือ Payload (CSV):**
+```
+28.5,65.2
+```
+
+---
+
+### 🔧 คำสั่ง Django Management ที่สำคัญ
+
+```bash
+# รัน Django Server
+python manage.py runserver
+
+# รัน MQTT Listener แยก (debug)
+python manage.py mqtt_listener
+python manage.py mqtt_listener --verbose
+
+# สร้าง migrations
+python manage.py makemigrations
+
+# Apply migrations
+python manage.py migrate
+
+# สร้าง superuser (admin)
+python manage.py createsuperuser
+
+# เปิด Django shell
+python manage.py shell
+
+# ดูข้อมูลใน Database
+python manage.py shell
+>>> from iot_dashboard.models import SensorData, Device, Relay
+>>> SensorData.objects.all().count()
+>>> SensorData.objects.latest('timestamp')
+>>> Device.objects.all()
+>>> Relay.objects.all()
+```
+
+---
+
+### 🌐 URLs ที่สำคัญ
+
+| URL | คำอธิบาย |
+|-----|----------|
+| http://127.0.0.1:8000/ | Dashboard หลัก |
+| http://127.0.0.1:8000/admin/ | Django Admin Panel |
+| http://127.0.0.1:8000/api/sensor-data/ | API ข้อมูล sensor (JSON) |
+| http://localhost:8000/ | เหมือนกับ 127.0.0.1:8000 |
+
+---
+
+### 📊 Database Models
+
+#### 1. Device (LED Control)
+```python
+name        : CharField (ชื่ออุปกรณ์)
+is_on       : BooleanField (สถานะเปิด/ปิด)
+last_updated: DateTimeField (เวลาอัปเดตล่าสุด)
+```
+
+#### 2. Relay (RELAY Control - 3 ช่อง)
+```python
+name            : CharField (ชื่อ controller)
+relay1_status   : BooleanField (สถานะ RELAY 1)
+relay2_status   : BooleanField (สถานะ RELAY 2)
+relay3_status   : BooleanField (สถานะ RELAY 3)
+last_updated    : DateTimeField (เวลาอัปเดตล่าสุด)
+```
+
+#### 3. SensorData (ข้อมูล Sensor)
+```python
+device_name : CharField (ชื่ออุปกรณ์)
+temperature : FloatField (อุณหภูมิ °C)
+humidity    : FloatField (ความชื้น %)
+timestamp   : DateTimeField (เวลาบันทึก - timezone aware)
+```
+
+---
+
+### 🎯 Quick Commands สำหรับ Windows
+
+#### ครั้งแรก (First Time Setup):
+```cmd
+git clone https://github.com/thaitechzone/DjangoDashboardFramework.git
+cd DjangoDashboardFramework\django_iot_dashboard
+setup.bat
+start_all.bat
+```
+
+#### ใช้งานปกติ (Daily Use):
+```cmd
+cd DjangoDashboardFramework\django_iot_dashboard
+start_all.bat
+```
+
+#### Debug MQTT:
+```cmd
+# Terminal 1
+start_mqtt.bat
+
+# Terminal 2
+test_send_sensor.bat
+```
+
+#### หยุดระบบ:
+```cmd
+Ctrl + C
+```
+หรือ
+```cmd
+stop_all.bat
+```
+
+---
+
+### 🔗 Links และ Resources
+
+#### เอกสารภายนอก:
+- 🐍 [Django Documentation](https://docs.djangoproject.com/)
+- 📡 [MQTT Protocol](https://mqtt.org/)
+- 🔌 [Paho MQTT Python](https://pypi.org/project/paho-mqtt/)
+- 🎨 [Chart.js Documentation](https://www.chartjs.org/docs/)
+- 🛠️ [ESP32 Arduino Core](https://docs.espressif.com/projects/arduino-esp32/)
+
+#### Tools:
+- 📊 [MQTT Explorer](http://mqtt-explorer.com/) - MQTT Client สำหรับ debug
+- 🔧 [Arduino IDE](https://www.arduino.cc/en/software) - โปรแกรม ESP32
+- 🐍 [Python Downloads](https://www.python.org/downloads/) - Python 3.8+
+- 📝 [VS Code](https://code.visualstudio.com/) - Code Editor (แนะนำ)
+
+#### MQTT Brokers (Public):
+- 🌐 **broker.hivemq.com** (ใช้ในโปรเจกต์นี้)
+- 🌐 test.mosquitto.org
+- 🌐 mqtt.eclipseprojects.io
+
+---
+
+### 💡 Tips และ Best Practices
+
+#### 1. การใช้งาน MQTT Listener:
+- ✅ **ใช้งานปกติ:** รัน Django Server เดียว (MQTT auto-start)
+- 🔍 **Debug:** รัน `start_mqtt.bat` แยกเพื่อดู log
+- 🧪 **ทดสอบ:** ใช้ `test_send_sensor.bat` ส่งข้อมูลทดสอบ
+
+#### 2. การจัดการ Virtual Environment:
+- ✅ เปิด venv ทุกครั้งก่อนรันคำสั่ง Python
+- ✅ ใช้ `setup.bat` ติดตั้งครั้งแรก
+- ✅ ใช้ `pip list` ตรวจสอบ packages
+
+#### 3. การ Debug:
+- 🔍 ดู Serial Monitor บน ESP32 (Baud: 115200)
+- 🔍 รัน `python manage.py mqtt_listener --verbose`
+- 🔍 เช็ค Database: `python manage.py shell`
+- 🔍 ใช้ MQTT Explorer ดู message flow
+
+#### 4. Security (Production):
+- ⚠️ เปลี่ยน SECRET_KEY ใน settings.py
+- ⚠️ ตั้ง DEBUG = False
+- ⚠️ ใช้ MQTT Broker ที่มี authentication
+- ⚠️ ใช้ HTTPS แทน HTTP
 
 ---
 
@@ -1045,25 +1630,7 @@ lsof -i :8000
 
 ### 🔧 ฟีเจอร์ที่สามารถเพิ่ม:
 
-#### 🌡️ การเพิ่มเซนเซอร์
-```cpp
-// เพิ่มเซนเซอร์อุณหภูมิ
-#include "DHT.h"
-DHT dht(4, DHT22);
-
-void sendSensorData() {
-  float temp = dht.readTemperature();
-  float humidity = dht.readHumidity();
-  
-  String payload = String(temp) + "," + String(humidity);
-  client.publish("thaitechzone/v2_board/sensors", payload.c_str());
-}
-```
-
-#### 📊 การเพิ่มกราฟ
-```html
-<!-- ใช้ Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+#### 1. 🔐 Authentication และ Authorization
 <canvas id="sensorChart"></canvas>
 ```
 
