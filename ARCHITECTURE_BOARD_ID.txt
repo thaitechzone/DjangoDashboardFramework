@@ -1,0 +1,158 @@
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                   ESP32 Board ID System Architecture                          ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              USER / WEB BROWSER                              │
+│                                                                              │
+│  Board 1: http://localhost:8000/?board_id=board_01                          │
+│  Board 2: http://localhost:8000/?board_id=board_02                          │
+│  Board 3: http://localhost:8000/?board_id=living_room                       │
+└────────────────────────────────┬────────────────────────────────────────────┘
+                                 │ HTTP Request
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          DJANGO WEB SERVER                                   │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ Views (views_simple.py)                                                │ │
+│  │                                                                        │ │
+│  │  dashboard_simple(board_id)   ← แสดงหน้า Dashboard ของบอร์ดที่เลือก  │ │
+│  │  control_led(board_id)        ← ควบคุม LED ของบอร์ดที่เลือก         │ │
+│  │  control_relay(board_id)      ← ควบคุม Relay ของบอร์ดที่เลือก       │ │
+│  │  api_sensor_data(board_id)    ← ดึงข้อมูล sensor ของบอร์ดที่เลือก   │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ Models (models.py)                                                     │ │
+│  │                                                                        │ │
+│  │  Device:      board_id + name + is_on                                 │ │
+│  │  Relay:       board_id + name + relay1/2/3_status                     │ │
+│  │  SensorData:  board_id + temperature + humidity + timestamp           │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ MQTT Manager (mqtt_manager.py)                                         │ │
+│  │                                                                        │ │
+│  │  get_topic(board_id, category, type)  ← สร้าง topic แบบ dynamic      │ │
+│  │  send_led_command(cmd, board_id)      ← ส่งคำสั่ง LED                │ │
+│  │  send_relay_command(num, cmd, bid)    ← ส่งคำสั่ง Relay              │ │
+│  │  add_board(board_id)                  ← เพิ่มบอร์ดใหม่              │ │
+│  │  tracked_boards: [board_01, board_02, living_room]                    │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ MQTT Callbacks (mqtt_callbacks.py)                                     │ │
+│  │                                                                        │ │
+│  │  extract_board_id_from_topic()       ← แยก board_id จาก topic        │ │
+│  │  handle_relay_state_message()        ← รับสถานะ Relay + บันทึกตาม bid│ │
+│  │  handle_sensor_data_message()        ← รับข้อมูล Sensor + บันทึกตาม bid│ │
+│  │  handle_led_status_message()         ← รับสถานะ LED + บันทึกตาม bid  │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+└────────────────────────────────┬────────────────────────────────────────────┘
+                                 │ MQTT Protocol
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    MQTT BROKER (broker.hivemq.com:1883)                      │
+│                                                                              │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                        TOPIC STRUCTURE                                │  │
+│  │                                                                       │  │
+│  │  thaitechzone/                                                        │  │
+│  │  ├── board_01/                                                        │  │
+│  │  │   ├── control/                                                     │  │
+│  │  │   │   ├── led           ← Dashboard ส่งคำสั่งควบคุม LED          │  │
+│  │  │   │   ├── relay1        ← Dashboard ส่งคำสั่งควบคุม Relay 1      │  │
+│  │  │   │   ├── relay2        ← Dashboard ส่งคำสั่งควบคุม Relay 2      │  │
+│  │  │   │   └── relay3        ← Dashboard ส่งคำสั่งควบคุม Relay 3      │  │
+│  │  │   ├── state/                                                      │  │
+│  │  │   │   ├── relay1        ← ESP32 ส่งสถานะ Relay 1 กลับ           │  │
+│  │  │   │   ├── relay2        ← ESP32 ส่งสถานะ Relay 2 กลับ           │  │
+│  │  │   │   └── relay3        ← ESP32 ส่งสถานะ Relay 3 กลับ           │  │
+│  │  │   ├── status/                                                     │  │
+│  │  │   │   └── led           ← ESP32 ส่งสถานะ LED กลับ               │  │
+│  │  │   └── sensor/                                                     │  │
+│  │  │       └── data          ← ESP32 ส่งข้อมูล sensor (JSON)         │  │
+│  │  │                                                                   │  │
+│  │  ├── board_02/                                                        │  │
+│  │  │   └── ... (structure เหมือนกับ board_01)                          │  │
+│  │  │                                                                   │  │
+│  │  └── living_room/                                                     │  │
+│  │      └── ... (structure เหมือนกับ board_01)                          │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────┬────────────────────────────────────────────┘
+                                 │ WiFi + MQTT
+                ┌────────────────┴─────────────────┬──────────────────────┐
+                ▼                                  ▼                      ▼
+┌───────────────────────────┐  ┌──────────────────────────┐  ┌─────────────────────┐
+│   ESP32 Board 1           │  │   ESP32 Board 2          │  │  ESP32 Board 3      │
+│   BOARD_ID = "board_01"   │  │   BOARD_ID = "board_02"  │  │  BOARD_ID =         │
+│                           │  │                          │  │    "living_room"    │
+│  ┌─────────────────────┐  │  │  ┌────────────────────┐  │  │  ┌───────────────┐  │
+│  │ Arduino Code        │  │  │  │ Arduino Code       │  │  │  │ Arduino Code  │  │
+│  │                     │  │  │  │                    │  │  │  │               │  │
+│  │ setupTopics()       │  │  │  │ setupTopics()      │  │  │  │ setupTopics() │  │
+│  │ - LED_CONTROL_TOPIC │  │  │  │ - LED_CONTROL_T... │  │  │  │ - LED_CONT... │  │
+│  │ - RELAY1_CONTROL... │  │  │  │ - RELAY1_CONTR...  │  │  │  │ - RELAY1_C... │  │
+│  │ - SENSOR_DATA_TOPIC │  │  │  │ - SENSOR_DATA_T... │  │  │  │ - SENSOR_D... │  │
+│  │                     │  │  │  │                    │  │  │  │               │  │
+│  │ Subscribe:          │  │  │  │ Subscribe:         │  │  │  │ Subscribe:    │  │
+│  │ - .../board_01/...  │  │  │  │ - .../board_02/... │  │  │  │ - .../living..│  │
+│  │                     │  │  │  │                    │  │  │  │               │  │
+│  │ Publish:            │  │  │  │ Publish:           │  │  │  │ Publish:      │  │
+│  │ - state topics      │  │  │  │ - state topics     │  │  │  │ - state topics│  │
+│  │ - sensor data       │  │  │  │ - sensor data      │  │  │  │ - sensor data │  │
+│  └─────────────────────┘  │  │  └────────────────────┘  │  │  └───────────────┘  │
+│  ┌─────────────────────┐  │  │  ┌────────────────────┐  │  │  ┌───────────────┐  │
+│  │ Hardware            │  │  │  │ Hardware           │  │  │  │ Hardware      │  │
+│  │                     │  │  │  │                    │  │  │  │               │  │
+│  │ - LED (GPIO 2)      │  │  │  │ - LED (GPIO 2)     │  │  │  │ - LED (G...   │  │
+│  │ - Relay 1 (GPIO 17) │  │  │  │ - Relay 1 (G...)   │  │  │  │ - Relay ...   │  │
+│  │ - Relay 2 (GPIO 16) │  │  │  │ - Relay 2 (G...)   │  │  │  │ - Relay ...   │  │
+│  │ - Relay 3 (GPIO 4)  │  │  │  │ - Relay 3 (G...)   │  │  │  │ - Relay ...   │  │
+│  │ - DHT22 (GPIO 15)   │  │  │  │ - DHT22 (GPIO ...)  │  │  │  │ - DHT22 ...   │  │
+│  └─────────────────────┘  │  │  └────────────────────┘  │  │  └───────────────┘  │
+└───────────────────────────┘  └──────────────────────────┘  └─────────────────────┘
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                            DATA FLOW EXAMPLE                                  ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+Example: User turns ON LED for board_01
+
+1. User clicks "Turn ON" button on dashboard (?board_id=board_01)
+   ↓
+2. JavaScript sends POST to: /control_led/ with board_id=board_01 and action=on
+   ↓
+3. Django view calls: send_led_command('ON', 'board_01')
+   ↓
+4. MQTT Manager generates topic: "thaitechzone/board_01/control/led"
+   ↓
+5. MQTT Manager publishes "ON" to topic
+   ↓
+6. MQTT Broker routes message to subscribers
+   ↓
+7. ESP32 board_01 receives message (subscribed to "thaitechzone/board_01/control/led")
+   ↓
+8. ESP32 turns LED ON (digitalWrite(LED_PIN, HIGH))
+   ↓
+9. ESP32 publishes state to "thaitechzone/board_01/status/led" with payload "ON"
+   ↓
+10. Django receives state message via MQTT callback
+    ↓
+11. Callback extracts board_id = "board_01" from topic
+    ↓
+12. Database updated: Device(board_id='board_01', is_on=True)
+    ↓
+13. Dashboard auto-refreshes and shows LED is ON
+
+Note: board_02 and living_room are NOT affected because they subscribe to
+      different topics!
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                          KEY BENEFITS                                         ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+✅ Multiple Boards:    Each ESP32 has unique topics
+✅ No Conflicts:       Commands go to specific board only
+✅ Data Separation:    Sensor data stored per board_id
+✅ Easy Management:    Simple URL parameter to switch boards
+✅ Scalable:           Add unlimited boards
+✅ Flexible Naming:    Use meaningful names (living_room, greenhouse_1, etc.)
+
