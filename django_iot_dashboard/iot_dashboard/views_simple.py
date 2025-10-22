@@ -5,11 +5,29 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 import json
 import logging
+import pytz
 from .models import Device, SensorData, Relay, ThresholdSetting
 from .mqtt_manager import get_mqtt_manager, send_led_command, send_relay_command
 
 # Setup logging
 logger = logging.getLogger(__name__)
+
+# Helper function to format datetime with Bangkok timezone
+def format_datetime_local(dt):
+    """แปลง datetime เป็น string พร้อม timezone Bangkok (+7)"""
+    if not dt:
+        return None
+    
+    # แปลงเป็น Bangkok timezone
+    bangkok_tz = pytz.timezone('Asia/Bangkok')
+    if timezone.is_aware(dt):
+        local_dt = dt.astimezone(bangkok_tz)
+    else:
+        # ถ้าเป็น naive datetime ให้ถือว่าเป็น UTC แล้วแปลงเป็น Bangkok
+        utc_dt = pytz.utc.localize(dt)
+        local_dt = utc_dt.astimezone(bangkok_tz)
+    
+    return local_dt.strftime('%Y-%m-%d %H:%M:%S')
 
 def dashboard_simple(request):
     """หน้า Dashboard แบบเรียบง่าย - ทำงานได้แน่นอน"""
@@ -43,6 +61,15 @@ def dashboard_simple(request):
     }
     
     return render(request, 'iot_dashboard/dashboard_simple.html', context)
+
+def ai_dashboard(request):
+    """AI Agent Dashboard - แสดงผลการวิเคราะห์และการตัดสินใจของ AI Agent"""
+    
+    context = {
+        'current_time': timezone.now(),
+    }
+    
+    return render(request, 'iot_dashboard/ai_dashboard.html', context)
 
 def control_led(request):
     """ควบคุม LED ผ่าน MQTT Manager"""
@@ -1151,6 +1178,305 @@ def api_threshold_reset(request):
         
     except Exception as e:
         logger.error(f"❌ Threshold Reset API Error: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+# ========================================
+# AI Agent API Endpoints
+# ========================================
+
+@csrf_exempt
+def api_ai_status(request):
+    """
+    GET: ดึงสถานะ AI Agent และการตัดสินใจล่าสุด
+    
+    Response:
+    {
+        "success": true,
+        "data": {
+            "scheduler": {
+                "is_running": true,
+                "interval_minutes": 15,
+                "next_run": "2024-01-15 11:00:00"
+            },
+            "recent_decisions": [
+                {
+                    "id": 123,
+                    "decision": "ON",
+                    "confidence": 0.85,
+                    "reasoning": "อุณหภูมิสูง...",
+                    "action_taken": true,
+                    "timestamp": "2024-01-15 10:45:00"
+                },
+                ...
+            ]
+        }
+    }
+    """
+    try:
+        if request.method != 'GET':
+            return JsonResponse({
+                'success': False,
+                'error': 'Method not allowed. Use GET'
+            }, status=405)
+        
+        from .ai_agent.scheduler import get_ai_scheduler
+        from .models import AIDecisionLog, Relay
+        
+        # Get scheduler status
+        scheduler = get_ai_scheduler()
+        scheduler_status = scheduler.get_status()
+        
+        # Get current Relay 2 status (สถานะจริงปัจจุบัน)
+        relay_controller = Relay.objects.first()
+        current_relay2_status = relay_controller.relay2_status if relay_controller else False
+        
+        # Get recent decisions (last 5)
+        recent_decisions = AIDecisionLog.get_recent_decisions(limit=5)
+        decisions_data = []
+        
+        for decision in recent_decisions:
+            decisions_data.append({
+                'id': decision.id,
+                'decision': decision.decision,
+                'confidence': float(decision.confidence),
+                'reasoning': decision.reasoning,
+                'weather_data': decision.weather_data,
+                'relay_status': decision.relay_status,
+                'command_sent': decision.command_sent,
+                'timestamp': format_datetime_local(decision.timestamp)
+            })
+        
+        # Get latest decision for weather display
+        latest_decision = None
+        if recent_decisions:
+            latest = recent_decisions[0]
+            latest_decision = {
+                'id': latest.id,
+                'decision': latest.decision,
+                'confidence': float(latest.confidence),
+                'reasoning': latest.reasoning,
+                'weather_data': latest.weather_data,
+                'relay_status': latest.relay_status,
+                'command_sent': latest.command_sent,
+                'timestamp': format_datetime_local(latest.timestamp)
+            }
+        
+        return JsonResponse({
+            'success': True,
+            'data': {
+                'scheduler': scheduler_status,
+                'recent_decisions': decisions_data,
+                'latest_decision': latest_decision,
+                'relay2_current_status': current_relay2_status  # เพิ่มสถานะจริงของ Relay 2
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ AI Status API Error: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def api_ai_decisions(request):
+    """
+    GET: ดึงประวัติการตัดสินใจของ AI (พร้อม pagination)
+    
+    Query Parameters:
+    - limit: จำนวนรายการต่อหน้า (default=20)
+    - offset: เริ่มจากรายการที่ (default=0)
+    
+    Response:
+    {
+        "success": true,
+        "data": [...],
+        "pagination": {
+            "total": 100,
+            "limit": 20,
+            "offset": 0,
+            "count": 20
+        }
+    }
+    """
+    try:
+        if request.method != 'GET':
+            return JsonResponse({
+                'success': False,
+                'error': 'Method not allowed. Use GET'
+            }, status=405)
+        
+        from .models import AIDecisionLog
+        
+        # Get pagination parameters
+        limit = int(request.GET.get('limit', 20))
+        offset = int(request.GET.get('offset', 0))
+        
+        # Get total count
+        total_count = AIDecisionLog.objects.count()
+        
+        # Get decisions with pagination
+        decisions = AIDecisionLog.objects.all()[offset:offset+limit]
+        
+        decisions_data = []
+        for decision in decisions:
+            decisions_data.append({
+                'id': decision.id,
+                'decision': decision.decision,
+                'confidence': float(decision.confidence),
+                'reasoning': decision.reasoning,
+                'weather_data': decision.weather_data,
+                'relay_status': decision.relay_status,
+                'command_sent': decision.command_sent,
+                'timestamp': format_datetime_local(decision.timestamp)
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'data': decisions_data,
+            'pagination': {
+                'total': total_count,
+                'limit': limit,
+                'offset': offset,
+                'count': len(decisions_data)
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ AI Decisions API Error: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def api_ai_analyze_now(request):
+    """
+    POST: สั่งให้ AI Agent วิเคราะห์และตัดสินใจทันที (ไม่รอ schedule)
+    
+    Response:
+    {
+        "success": true,
+        "message": "AI analysis triggered successfully",
+        "data": {
+            "latest_decision": {
+                "id": 124,
+                "decision": "OFF",
+                "confidence": 0.75,
+                "reasoning": "อุณหภูมิต่ำ...",
+                "timestamp": "2024-01-15 10:50:00"
+            }
+        }
+    }
+    """
+    try:
+        if request.method != 'POST':
+            return JsonResponse({
+                'success': False,
+                'error': 'Method not allowed. Use POST'
+            }, status=405)
+        
+        from .ai_agent.scheduler import get_ai_scheduler
+        from .models import AIDecisionLog
+        
+        # Trigger AI analysis
+        scheduler = get_ai_scheduler()
+        result = scheduler.trigger_manual_analysis()
+        
+        if not result['success']:
+            return JsonResponse({
+                'success': False,
+                'error': result.get('message', 'AI analysis failed')
+            }, status=500)
+        
+        # Get latest decision
+        latest_decision = AIDecisionLog.objects.first()
+        
+        decision_data = None
+        if latest_decision:
+            decision_data = {
+                'id': latest_decision.id,
+                'decision': latest_decision.decision,
+                'confidence': float(latest_decision.confidence),
+                'reasoning': latest_decision.reasoning,
+                'weather_data': latest_decision.weather_data,
+                'relay_status': latest_decision.relay_status,
+                'command_sent': latest_decision.command_sent,
+                'timestamp': format_datetime_local(latest_decision.timestamp)
+            }
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'AI analysis triggered successfully',
+            'data': {
+                'latest_decision': decision_data
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ AI Analyze Now API Error: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def api_ai_stats(request):
+    """
+    GET: ดึงสถิติการทำงานของ AI Agent
+    
+    Query Parameters:
+    - days: จำนวนวันย้อนหลัง (default=7)
+    
+    Response:
+    {
+        "success": true,
+        "data": {
+            "total_decisions": 100,
+            "actions_taken": 25,
+            "on_decisions": 60,
+            "off_decisions": 40,
+            "avg_confidence": 0.82,
+            "period_days": 7
+        }
+    }
+    """
+    try:
+        if request.method != 'GET':
+            return JsonResponse({
+                'success': False,
+                'error': 'Method not allowed. Use GET'
+            }, status=405)
+        
+        from .models import AIDecisionLog
+        
+        # Get days parameter
+        days = int(request.GET.get('days', 7))
+        
+        # Get statistics
+        stats = AIDecisionLog.get_statistics(days=days)
+        
+        return JsonResponse({
+            'success': True,
+            'data': {
+                'total_decisions': stats['total_decisions'],
+                'on_decisions': stats['on_decisions'],
+                'off_decisions': stats['off_decisions'],
+                'avg_confidence': round(float(stats['avg_confidence']), 3),
+                'period_days': days,
+                'daily_breakdown': stats['daily_breakdown']
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ AI Stats API Error: {e}")
         return JsonResponse({
             'success': False,
             'error': str(e)

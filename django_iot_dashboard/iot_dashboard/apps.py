@@ -15,7 +15,7 @@ class IotDashboardConfig(AppConfig):
     name = 'iot_dashboard'
     
     def ready(self):
-        """เริ่มต้น MQTT Manager เมื่อ Django app พร้อมใช้งาน"""
+        """เริ่มต้น MQTT Manager และ AI Agent Scheduler เมื่อ Django app พร้อมใช้งาน"""
         try:
             # Import ใน ready() เพื่อหลีกเลี่ยง import errors
             from .mqtt_manager import get_mqtt_manager
@@ -34,3 +34,19 @@ class IotDashboardConfig(AppConfig):
             
         except Exception as e:
             logger.error(f"❌ Failed to initialize MQTT Manager: {e}")
+        
+        # เริ่มต้น AI Agent Scheduler
+        try:
+            from .ai_agent.scheduler import get_ai_scheduler
+            
+            logger.info("🤖 Initializing AI Agent Scheduler...")
+            
+            # เริ่มต้น AI Scheduler
+            scheduler = get_ai_scheduler()
+            scheduler.start()
+            
+            logger.info("✅ AI Agent Scheduler started successfully!")
+            logger.info(f"⏰ Next AI analysis at: {scheduler.get_status()['next_run']}")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize AI Agent Scheduler: {e}")

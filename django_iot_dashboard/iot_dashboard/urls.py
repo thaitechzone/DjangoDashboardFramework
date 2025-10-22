@@ -11,6 +11,9 @@ urlpatterns = [
     # Simple dashboard (recommended)
     path('', views_simple.dashboard_simple, name='dashboard_simple'),
     
+    # AI Agent Dashboard
+    path('ai/', views_simple.ai_dashboard, name='ai_dashboard'),
+    
     # Original complex dashboard (backup)
     path('complex/', views.dashboard_view, name='dashboard'),
     
@@ -54,4 +57,10 @@ urlpatterns = [
     path('api/v1/threshold/', views_simple.api_threshold_settings, name='api_v1_threshold_settings'),
     path('api/v1/threshold/check/', views_simple.api_threshold_check, name='api_v1_threshold_check'),
     path('api/v1/threshold/reset/', views_simple.api_threshold_reset, name='api_v1_threshold_reset'),
+    
+    # AI Agent API
+    path('api/v1/ai/status/', views_simple.api_ai_status, name='api_v1_ai_status'),
+    path('api/v1/ai/decisions/', views_simple.api_ai_decisions, name='api_v1_ai_decisions'),
+    path('api/v1/ai/analyze-now/', views_simple.api_ai_analyze_now, name='api_v1_ai_analyze_now'),
+    path('api/v1/ai/stats/', views_simple.api_ai_stats, name='api_v1_ai_stats'),
 ]

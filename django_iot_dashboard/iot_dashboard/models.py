@@ -346,3 +346,146 @@ class ThresholdSetting(models.Model):
             }
         )
         return obj
+
+
+class AIDecisionLog(models.Model):
+    """
+    Model สำหรับบันทึกการตัดสินใจของ AI Agent
+    ใช้เก็บประวัติการควบคุม Relay 2 โดย Gemini AI
+    """
+    # การตัดสินใจของ AI
+    decision = models.CharField(
+        max_length=10,
+        verbose_name="การตัดสินใจ",
+        help_text="on = เปิด, off = ปิด"
+    )
+    
+    # ความมั่นใจในการตัดสินใจ (0.0 - 1.0)
+    confidence = models.FloatField(
+        default=0.0,
+        verbose_name="ความมั่นใจ"
+    )
+    
+    # เหตุผลในการตัดสินใจ (คำอธิบายจาก AI)
+    reasoning = models.TextField(
+        verbose_name="เหตุผล",
+        help_text="คำอธิบายการตัดสินใจจาก AI"
+    )
+    
+    # ข้อมูลสภาพอากาศที่ใช้ตัดสินใจ (เก็บเป็น JSON)
+    weather_data = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="ข้อมูลสภาพอากาศ"
+    )
+    
+    # สถานะ Relay 2 หลังตัดสินใจ
+    relay_status = models.BooleanField(
+        default=False,
+        verbose_name="สถานะ Relay 2"
+    )
+    
+    # คำสั่งถูกส่งสำเร็จหรือไม่
+    command_sent = models.BooleanField(
+        default=False,
+        verbose_name="ส่งคำสั่งสำเร็จ"
+    )
+    
+    # เวลาที่บันทึก
+    timestamp = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="เวลาที่บันทึก"
+    )
+    
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = "AI Decision Log"
+        verbose_name_plural = "AI Decision Logs"
+    
+    def __str__(self):
+        return f"{self.timestamp.strftime('%d/%m/%Y %H:%M')} - {self.decision.upper()} - Confidence: {self.confidence:.2f}"
+    
+    def get_decision_display_thai(self):
+        """แสดงการตัดสินใจเป็นภาษาไทยพร้อม icon"""
+        if self.decision == 'on':
+            return "🟢 เปิด Relay 2 (ON)"
+        else:
+            return "⚫ ปิด Relay 2 (OFF)"
+    
+    def get_confidence_display(self):
+        """แสดงความมั่นใจเป็น %"""
+        return f"{self.confidence * 100:.1f}%"
+    
+    def get_timestamp_thai(self):
+        """แสดงเวลาในรูปแบบภาษาไทย"""
+        if self.timestamp:
+            return self.timestamp.strftime("%d/%m/%Y %H:%M:%S")
+        return "ไม่มีข้อมูล"
+    
+    @classmethod
+    def get_recent_decisions(cls, limit=10):
+        """ดึงการตัดสินใจล่าสุด"""
+        return cls.objects.all()[:limit]
+    
+    @classmethod
+    def get_statistics(cls, days=7):
+        """
+        สถิติการตัดสินใจของ AI ในช่วง N วันที่ผ่านมา
+        
+        Returns:
+            dict: {
+                'total_decisions': int,
+                'on_decisions': int,
+                'off_decisions': int,
+                'avg_confidence': float,
+                'daily_breakdown': list
+            }
+        """
+        from django.utils import timezone
+        from datetime import timedelta
+        from django.db.models import Count, Avg
+        from django.db.models.functions import TruncDate
+        
+        start_date = timezone.now() - timedelta(days=days)
+        decisions = cls.objects.filter(timestamp__gte=start_date)
+        
+        total = decisions.count()
+        if total == 0:
+            return {
+                'total_decisions': 0,
+                'on_decisions': 0,
+                'off_decisions': 0,
+                'avg_confidence': 0.0,
+                'daily_breakdown': []
+            }
+        
+        on_decisions = decisions.filter(decision='on').count()
+        off_decisions = decisions.filter(decision='off').count()
+        avg_confidence = decisions.aggregate(Avg('confidence'))['confidence__avg'] or 0.0
+        
+        # Daily breakdown
+        daily = decisions.annotate(date=TruncDate('timestamp')).values('date').annotate(
+            total=Count('id'),
+            on_count=Count('id', filter=models.Q(decision='on')),
+            off_count=Count('id', filter=models.Q(decision='off')),
+            avg_confidence=Avg('confidence')
+        ).order_by('date')
+        
+        daily_breakdown = [
+            {
+                'date': item['date'].strftime('%Y-%m-%d'),
+                'total': item['total'],
+                'on_count': item['on_count'],
+                'off_count': item['off_count'],
+                'avg_confidence': item['avg_confidence'] or 0.0
+            }
+            for item in daily
+        ]
+        
+        return {
+            'total_decisions': total,
+            'on_decisions': on_decisions,
+            'off_decisions': off_decisions,
+            'avg_confidence': avg_confidence,
+            'daily_breakdown': daily_breakdown
+        }
