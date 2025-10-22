@@ -80,7 +80,30 @@
 - ✅ **ตาราง Recent Readings** แสดง 10 รายการล่าสุด
 - ✅ **เวลาอัปเดตล่าสุด** สำหรับแต่ละ sensor
 
-### 4. 🔄 การสื่อสารแบบ 2 ทาง (Bidirectional)
+### 4. � **NEW! Threshold Alarm System (Auto/Manual Control)**
+- ✅ **กำหนดค่า Threshold** สำหรับ Temperature และ Humidity (High/Low)
+- ✅ **โหมด AUTO** - ควบคุม Relay 1 อัตโนมัติเมื่อค่าเกิน Threshold
+- ✅ **โหมด MANUAL** - ผู้ใช้ควบคุม Relay 1 เองผ่าน Dashboard
+- ✅ **Alarm Status Display** - แสดงสถานะแจ้งเตือนพร้อมเหตุผล
+- ✅ **Average Calculation** - คำนวณค่าเฉลี่ยจากข้อมูลล่าสุด
+- ✅ **Hysteresis Support** - ป้องกัน Relay เปิด-ปิดบ่อยเกินไป
+- ✅ **Alarm Reset** - รีเซ็ตและปิด Relay 1 ได้ทันที
+- ✅ **REST API** - จัดการ Threshold ผ่าน API
+- 📖 **Documentation**: [THRESHOLD_FEATURE.md](THRESHOLD_FEATURE.md)
+
+### 5. 🔌 REST API สำหรับ Integration
+- ✅ **9 API Endpoints** รองรับ GET/POST/PUT/PATCH/DELETE
+- ✅ **LED Control API** - ควบคุม LED ผ่าน JSON
+- ✅ **Relay Control API** - ควบคุม 3 relays ผ่าน JSON
+- ✅ **Sensor Data API** - CRUD operations พร้อม pagination
+- ✅ **Statistics API** - ค่าเฉลี่ย, min, max ของ sensor data
+- ✅ **System Status API** - ดูสถานะระบบทั้งหมดพร้อมกัน
+- ✅ **Threshold API** - จัดการ Threshold Settings
+- ✅ **Postman Collection** - พร้อมใช้งาน (21+ requests)
+- ✅ **Code Examples** - Python และ JavaScript
+- 📖 **Documentation**: [API_GUIDE.md](API_GUIDE.md)
+
+### 6. �🔄 การสื่อสารแบบ 2 ทาง (Bidirectional)
 
 #### Dashboard → ESP32 (Control Commands):
 ```
@@ -92,7 +115,12 @@ User กดปุ่ม → Django ส่งคำสั่ง MQTT → ESP32 �
 ESP32 เปลี่ยนสถานะ → ส่ง MQTT กลับมา → Django อัปเดต Database → UI แสดงผล
 ```
 
-### 5. ⏰ ระบบเวลา Thailand Timezone
+#### AUTO Threshold Control:
+```
+ESP32 ส่ง sensor data → Django ตรวจสอบ Threshold → เกิน threshold → Django ส่งคำสั่ง → ESP32 เปิด Relay 1
+```
+
+### 7. ⏰ ระบบเวลา Thailand Timezone
 - ✅ **แสดงเวลาไทย (UTC+7)** ทุกจุด
 - ✅ **Current Time** อัปเดตทุกวินาที
 - ✅ **Last Updated** ใน Temperature/Humidity cards
@@ -100,7 +128,7 @@ ESP32 เปลี่ยนสถานะ → ส่ง MQTT กลับมา
 - ✅ **Recent Readings Table** แสดงวันที่และเวลาไทย
 - ✅ **Auto-refresh** ทุก 5 วินาที พร้อม timezone ที่ถูกต้อง
 
-### 6. 🎨 ส่วนติดต่อผู้ใช้ (UI/UX)
+### 8. 🎨 ส่วนติดต่อผู้ใช้ (UI/UX)
 - ✅ **Gradient Background** สีเขียวอ่อนพาสเทล
 - ✅ **Cards Design** สวยงามพร้อม shadows
 - ✅ **Button Animations** hover effects
@@ -108,6 +136,7 @@ ESP32 เปลี่ยนสถานะ → ส่ง MQTT กลับมา
 - ✅ **Loading Indicators** แสดงขณะกำลังทำงาน
 - ✅ **Success Messages** แจ้งผลการทำงาน
 - ✅ **Auto-update Indicator** แสดงสถานะการรีเฟรช
+- ✅ **Threshold Configuration Card** - UI สำหรับตั้งค่า Threshold
 
 ---
 
@@ -1384,6 +1413,62 @@ DjangoDashboardFramework/
 ```
 
 ---
+
+## 🧩 องค์ประกอบของโปรเจกต์ (Project Components)
+
+ส่วนนี้สรุปไฟล์และโฟลเดอร์สำคัญใน repository เวอร์ชันปัจจุบัน พร้อมคำอธิบายสั้นๆ เพื่อให้เข้าใจโครงสร้างและความรับผิดชอบของแต่ละไฟล์ได้อย่างรวดเร็ว
+
+### โครงสร้างระดับบน (Top-level)
+
+- `Dockerfile` — คำสั่งสร้าง Docker image สำหรับรันโปรเจกต์
+- `docker-compose.yml` — Compose file สำหรับรัน service (web)
+- `docker-compose.dev.yml` — Compose สำหรับ development (live reload)
+- `.dockerignore` — รายการไฟล์ที่ไม่ต้อง copy เข้า image
+- `DOCKER_QUICK_START.md` — คู่มือสั้นสำหรับรันด้วย Docker
+- `HOW_TO_CREATE_DOCKER.md` — คำอธิบายการสร้าง Dockerfile และ Compose
+- `README.md` — เอกสารหลัก (ไฟล์นี้)
+- `QUICK_START_WINDOWS.md` — คู่มือสำหรับผู้ใช้ Windows (batch scripts)
+- `generate_sample_data.py` — สร้างข้อมูลตัวอย่าง (ทดสอบ dashboard)
+
+### โฟลเดอร์สำคัญ (Repository contents)
+
+- `django_iot_dashboard/` — โฟลเดอร์โปรเจกต์ Django (หลัก)
+  - `manage.py` — สคริปต์ Django สำหรับรันคำสั่งต่างๆ
+  - `requirements.txt` — รายการ Python dependencies
+  - `db.sqlite3` — SQLite database (ถ้ามี)
+  - `dashboard_project/` — Django project configuration (settings, urls)
+  - `iot_dashboard/` — Django app หลัก (models, views, templates)
+
+### รายการไฟล์สำคัญภายใน `iot_dashboard/`
+
+- `models.py` — คำจำกัดความของ `Device`, `Relay`, `SensorData`
+- `views_simple.py` — Views สำหรับหน้า dashboard แบบเรียบง่าย (ใช้จริง)
+- `views.py` — Views ที่ซับซ้อนหรือเวอร์ชันทดลอง
+- `urls.py` — เส้นทาง (routes) ของ app
+- `apps.py` — ใช้สำหรับเริ่ม MQTT auto-start เมื่อ Django boot
+- `mqtt_manager.py` — ตัวจัดการการเชื่อมต่อ MQTT (Singleton)
+- `mqtt_callbacks.py` — ฟังก์ชัน callback สำหรับรับข้อความจาก broker
+- `templates/iot_dashboard/dashboard_simple.html` — เทมเพลตหน้า dashboard
+- `management/commands/mqtt_listener.py` — คำสั่ง `python manage.py mqtt_listener` สำหรับรัน listener แยก
+- `migrations/` — เก็บไฟล์ migration ของฐานข้อมูล
+
+### Scripts / Tests / Utilities
+
+- `*.bat` (เช่น `setup.bat`, `start_all.bat`, `start_server.bat`, `start_mqtt.bat`, `stop_all.bat`, `check_status.bat`) — สคริปต์ Windows สำหรับติดตั้ง/รัน/หยุดระบบ
+- `test_mqtt_sender.py`, `test_mqtt_api.py`, `test_mqtt_connection.py` — สคริปต์ทดสอบ MQTT
+- `test_send_sensor.bat` — สคริปต์ส่งข้อมูล sensor แบบง่ายเพื่อทดสอบ
+
+### เอกสารและตัวอย่างโค้ดฮาร์ดแวร์
+
+- `ESP32_RELAY_CONTROL.md` / `ESP32_RELAY_CONTROL_FULL_CODE.ino` — คู่มือและโค้ดสำหรับ ESP32 (DHT22, RELAY)
+- `ESP32_RELAY_COMPLETE_CODE.ino` — โค้ดตัวอย่างที่สมบูรณ์ (อัปโหลดลงบอร์ด)
+
+### หมายเหตุสำคัญ
+
+- ไฟล์และโฟลเดอร์ที่มี `⭐` ใน README เดิม เป็นไฟล์ที่ทีมพัฒนาให้ความสำคัญเป็นพิเศษ (เช่น `mqtt_manager.py`, `apps.py`, `views_simple.py`)
+- หากต้องการแจกจ่ายให้ผู้อื่น ให้ใช้ `docker-compose.yml` ที่มีอยู่หรือ build image แล้ว push ไปยัง Docker Hub
+- หากต้องการเปลี่ยนไปใช้ฐานข้อมูลอื่น (Postgres/MySQL) ให้ปรับค่าใน `dashboard_project/settings.py` และแก้ `docker-compose.yml` เพิ่ม service ของฐานข้อมูล
+
 
 ### 🎯 ไฟล์ Batch Scripts สำหรับ Windows
 

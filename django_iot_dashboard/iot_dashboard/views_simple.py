@@ -5,7 +5,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 import json
 import logging
-from .models import Device, SensorData, Relay
+from .models import Device, SensorData, Relay, ThresholdSetting
 from .mqtt_manager import get_mqtt_manager, send_led_command, send_relay_command
 
 # Setup logging
@@ -243,3 +243,901 @@ def api_chart_data(request):
             'success': False,
             'error': str(e)
         })
+
+
+# ============================================
+# REST API Endpoints for Postman
+# ============================================
+
+@csrf_exempt
+def api_led_status(request):
+    """
+    GET: อ่านสถานะ LED
+    POST: ควบคุม LED (เปิด/ปิด)
+    """
+    if request.method == 'GET':
+        try:
+            led_device, created = Device.objects.get_or_create(name="Onboard LED")
+            
+            return JsonResponse({
+                'success': True,
+                'data': {
+                    'id': led_device.id,
+                    'name': led_device.name,
+                    'is_on': led_device.is_on,
+                    'last_updated': led_device.last_updated.strftime('%Y-%m-%d %H:%M:%S') if led_device.last_updated else None
+                }
+            })
+        except Exception as e:
+            logger.error(f"❌ GET LED Status Error: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    elif request.method == 'POST':
+        try:
+            # Parse JSON body
+            data = json.loads(request.body)
+            command = data.get('command', '').upper()  # 'ON', 'OFF', 'TOGGLE'
+            
+            if command not in ['ON', 'OFF', 'TOGGLE']:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Invalid command. Use: ON, OFF, or TOGGLE'
+                }, status=400)
+            
+            led_device, created = Device.objects.get_or_create(name="Onboard LED")
+            
+            # Handle TOGGLE
+            if command == 'TOGGLE':
+                command = 'OFF' if led_device.is_on else 'ON'
+            
+            # Send MQTT command
+            success, result_msg = send_led_command(command)
+            
+            if success:
+                # Update database
+                led_device.is_on = (command == 'ON')
+                led_device.last_updated = timezone.now()
+                led_device.save()
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': f'LED turned {command}',
+                    'data': {
+                        'id': led_device.id,
+                        'name': led_device.name,
+                        'is_on': led_device.is_on,
+                        'command_sent': command,
+                        'last_updated': led_device.last_updated.strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                })
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'MQTT command failed: {result_msg}'
+                }, status=500)
+                
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON body'
+            }, status=400)
+        except Exception as e:
+            logger.error(f"❌ POST LED Control Error: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    else:
+        return JsonResponse({
+            'success': False,
+            'error': 'Method not allowed. Use GET or POST'
+        }, status=405)
+
+
+@csrf_exempt
+def api_relay_status(request):
+    """
+    GET: อ่านสถานะ RELAY ทั้งหมด
+    POST: ควบคุม RELAY (เปิด/ปิด/toggle)
+    """
+    if request.method == 'GET':
+        try:
+            relay_controller, created = Relay.objects.get_or_create(
+                name="ESP32 Relay Controller",
+                defaults={
+                    'relay1_status': False,
+                    'relay2_status': False,
+                    'relay3_status': False
+                }
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'data': {
+                    'id': relay_controller.id,
+                    'name': relay_controller.name,
+                    'relay1': relay_controller.relay1_status,
+                    'relay2': relay_controller.relay2_status,
+                    'relay3': relay_controller.relay3_status,
+                    'last_updated': relay_controller.last_updated.strftime('%Y-%m-%d %H:%M:%S') if relay_controller.last_updated else None
+                }
+            })
+        except Exception as e:
+            logger.error(f"❌ GET Relay Status Error: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    elif request.method == 'POST':
+        try:
+            # Parse JSON body
+            data = json.loads(request.body)
+            relay_num = data.get('relay_num')  # 1, 2, or 3
+            command = data.get('command', '').upper()  # 'ON', 'OFF', 'TOGGLE'
+            
+            if relay_num not in [1, 2, 3]:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Invalid relay_num. Use: 1, 2, or 3'
+                }, status=400)
+            
+            if command not in ['ON', 'OFF', 'TOGGLE']:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Invalid command. Use: ON, OFF, or TOGGLE'
+                }, status=400)
+            
+            relay_controller, created = Relay.objects.get_or_create(
+                name="ESP32 Relay Controller",
+                defaults={
+                    'relay1_status': False,
+                    'relay2_status': False,
+                    'relay3_status': False
+                }
+            )
+            
+            # Get current status
+            if relay_num == 1:
+                current_status = relay_controller.relay1_status
+            elif relay_num == 2:
+                current_status = relay_controller.relay2_status
+            else:
+                current_status = relay_controller.relay3_status
+            
+            # Handle TOGGLE
+            if command == 'TOGGLE':
+                command = 'OFF' if current_status else 'ON'
+            
+            # Send MQTT command
+            success, result_msg = send_relay_command(relay_num, command)
+            
+            if success:
+                # Update database
+                new_status = (command == 'ON')
+                if relay_num == 1:
+                    relay_controller.relay1_status = new_status
+                elif relay_num == 2:
+                    relay_controller.relay2_status = new_status
+                else:
+                    relay_controller.relay3_status = new_status
+                
+                relay_controller.last_updated = timezone.now()
+                relay_controller.save()
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': f'Relay {relay_num} turned {command}',
+                    'data': {
+                        'id': relay_controller.id,
+                        'relay_num': relay_num,
+                        'status': new_status,
+                        'command_sent': command,
+                        'last_updated': relay_controller.last_updated.strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                })
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'MQTT command failed: {result_msg}'
+                }, status=500)
+                
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON body'
+            }, status=400)
+        except Exception as e:
+            logger.error(f"❌ POST Relay Control Error: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    else:
+        return JsonResponse({
+            'success': False,
+            'error': 'Method not allowed. Use GET or POST'
+        }, status=405)
+
+
+@csrf_exempt
+def api_sensors_list(request):
+    """
+    GET: ดึงรายการข้อมูล sensor (พร้อม pagination)
+    POST: เพิ่มข้อมูล sensor ใหม่ (สำหรับทดสอบ)
+    """
+    if request.method == 'GET':
+        try:
+            # Get query parameters
+            limit = int(request.GET.get('limit', 20))
+            offset = int(request.GET.get('offset', 0))
+            
+            # Get total count
+            total_count = SensorData.objects.count()
+            
+            # Get sensors with pagination
+            sensors = SensorData.objects.order_by('-timestamp')[offset:offset+limit]
+            
+            data = []
+            for sensor in sensors:
+                data.append({
+                    'id': sensor.id,
+                    'temperature': float(sensor.temperature) if sensor.temperature is not None else None,
+                    'humidity': float(sensor.humidity) if sensor.humidity is not None else None,
+                    'timestamp': sensor.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                    'device_name': sensor.device_name
+                })
+            
+            return JsonResponse({
+                'success': True,
+                'data': data,
+                'pagination': {
+                    'total': total_count,
+                    'limit': limit,
+                    'offset': offset,
+                    'count': len(data)
+                }
+            })
+        except Exception as e:
+            logger.error(f"❌ GET Sensors Error: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    elif request.method == 'POST':
+        try:
+            # Parse JSON body
+            data = json.loads(request.body)
+            temperature = data.get('temperature')
+            humidity = data.get('humidity')
+            device_name = data.get('device_name', 'API_Manual')
+            
+            if temperature is None or humidity is None:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'temperature and humidity are required'
+                }, status=400)
+            
+            # Create sensor data
+            sensor = SensorData.objects.create(
+                temperature=float(temperature),
+                humidity=float(humidity),
+                device_name=device_name,
+                timestamp=timezone.now()
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Sensor data created successfully',
+                'data': {
+                    'id': sensor.id,
+                    'temperature': float(sensor.temperature),
+                    'humidity': float(sensor.humidity),
+                    'device_name': sensor.device_name,
+                    'timestamp': sensor.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                }
+            }, status=201)
+            
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON body'
+            }, status=400)
+        except Exception as e:
+            logger.error(f"❌ POST Sensor Error: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    else:
+        return JsonResponse({
+            'success': False,
+            'error': 'Method not allowed. Use GET or POST'
+        }, status=405)
+
+
+@csrf_exempt
+def api_sensor_detail(request, sensor_id):
+    """
+    GET: ดึงข้อมูล sensor ตาม ID
+    PUT/PATCH: แก้ไขข้อมูล sensor
+    DELETE: ลบข้อมูล sensor
+    """
+    try:
+        sensor = SensorData.objects.get(id=sensor_id)
+    except SensorData.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': f'Sensor with ID {sensor_id} not found'
+        }, status=404)
+    
+    if request.method == 'GET':
+        try:
+            return JsonResponse({
+                'success': True,
+                'data': {
+                    'id': sensor.id,
+                    'temperature': float(sensor.temperature) if sensor.temperature is not None else None,
+                    'humidity': float(sensor.humidity) if sensor.humidity is not None else None,
+                    'timestamp': sensor.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                    'device_name': sensor.device_name
+                }
+            })
+        except Exception as e:
+            logger.error(f"❌ GET Sensor Detail Error: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    elif request.method in ['PUT', 'PATCH']:
+        try:
+            # Parse JSON body
+            data = json.loads(request.body)
+            
+            if 'temperature' in data:
+                sensor.temperature = float(data['temperature'])
+            if 'humidity' in data:
+                sensor.humidity = float(data['humidity'])
+            if 'device_name' in data:
+                sensor.device_name = data['device_name']
+            
+            sensor.save()
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Sensor data updated successfully',
+                'data': {
+                    'id': sensor.id,
+                    'temperature': float(sensor.temperature) if sensor.temperature is not None else None,
+                    'humidity': float(sensor.humidity) if sensor.humidity is not None else None,
+                    'timestamp': sensor.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                    'device_name': sensor.device_name
+                }
+            })
+            
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON body'
+            }, status=400)
+        except Exception as e:
+            logger.error(f"❌ UPDATE Sensor Error: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    elif request.method == 'DELETE':
+        try:
+            sensor_data = {
+                'id': sensor.id,
+                'temperature': float(sensor.temperature) if sensor.temperature is not None else None,
+                'humidity': float(sensor.humidity) if sensor.humidity is not None else None,
+                'timestamp': sensor.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            }
+            sensor.delete()
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Sensor data deleted successfully',
+                'deleted_data': sensor_data
+            })
+        except Exception as e:
+            logger.error(f"❌ DELETE Sensor Error: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    else:
+        return JsonResponse({
+            'success': False,
+            'error': 'Method not allowed. Use GET, PUT, PATCH, or DELETE'
+        }, status=405)
+
+
+@csrf_exempt
+def api_sensors_latest(request):
+    """GET: ดึงข้อมูล sensor ล่าสุด"""
+    try:
+        latest = SensorData.objects.order_by('-timestamp').first()
+        
+        if not latest:
+            return JsonResponse({
+                'success': True,
+                'data': None,
+                'message': 'No sensor data available'
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'data': {
+                'id': latest.id,
+                'temperature': float(latest.temperature) if latest.temperature is not None else None,
+                'humidity': float(latest.humidity) if latest.humidity is not None else None,
+                'timestamp': latest.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                'device_name': latest.device_name
+            }
+        })
+    except Exception as e:
+        logger.error(f"❌ GET Latest Sensor Error: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def api_sensors_stats(request):
+    """GET: ดึงสถิติข้อมูล sensor"""
+    try:
+        from django.db.models import Avg, Max, Min, Count
+        
+        stats = SensorData.objects.aggregate(
+            total_count=Count('id'),
+            avg_temperature=Avg('temperature'),
+            max_temperature=Max('temperature'),
+            min_temperature=Min('temperature'),
+            avg_humidity=Avg('humidity'),
+            max_humidity=Max('humidity'),
+            min_humidity=Min('humidity')
+        )
+        
+        latest = SensorData.objects.order_by('-timestamp').first()
+        oldest = SensorData.objects.order_by('timestamp').first()
+        
+        return JsonResponse({
+            'success': True,
+            'data': {
+                'total_readings': stats['total_count'],
+                'temperature': {
+                    'average': round(float(stats['avg_temperature']), 2) if stats['avg_temperature'] else None,
+                    'max': float(stats['max_temperature']) if stats['max_temperature'] else None,
+                    'min': float(stats['min_temperature']) if stats['min_temperature'] else None
+                },
+                'humidity': {
+                    'average': round(float(stats['avg_humidity']), 2) if stats['avg_humidity'] else None,
+                    'max': float(stats['max_humidity']) if stats['max_humidity'] else None,
+                    'min': float(stats['min_humidity']) if stats['min_humidity'] else None
+                },
+                'latest_reading': latest.timestamp.strftime('%Y-%m-%d %H:%M:%S') if latest else None,
+                'oldest_reading': oldest.timestamp.strftime('%Y-%m-%d %H:%M:%S') if oldest else None
+            }
+        })
+    except Exception as e:
+        logger.error(f"❌ GET Sensor Stats Error: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def api_system_status(request):
+    """GET: ดึงสถานะระบบทั้งหมด"""
+    try:
+        # Get LED status
+        led_device, _ = Device.objects.get_or_create(name="Onboard LED")
+        
+        # Get Relay status
+        relay_controller, _ = Relay.objects.get_or_create(
+            name="ESP32 Relay Controller",
+            defaults={
+                'relay1_status': False,
+                'relay2_status': False,
+                'relay3_status': False
+            }
+        )
+        
+        # Get sensor stats
+        latest_sensor = SensorData.objects.order_by('-timestamp').first()
+        total_sensors = SensorData.objects.count()
+        
+        # Get MQTT status
+        mqtt_manager = get_mqtt_manager()
+        mqtt_connected = mqtt_manager.is_connected() if mqtt_manager else False
+        
+        return JsonResponse({
+            'success': True,
+            'data': {
+                'led': {
+                    'is_on': led_device.is_on,
+                    'last_updated': led_device.last_updated.strftime('%Y-%m-%d %H:%M:%S') if led_device.last_updated else None
+                },
+                'relays': {
+                    'relay1': relay_controller.relay1_status,
+                    'relay2': relay_controller.relay2_status,
+                    'relay3': relay_controller.relay3_status,
+                    'last_updated': relay_controller.last_updated.strftime('%Y-%m-%d %H:%M:%S') if relay_controller.last_updated else None
+                },
+                'sensors': {
+                    'total_readings': total_sensors,
+                    'latest': {
+                        'temperature': float(latest_sensor.temperature) if latest_sensor and latest_sensor.temperature else None,
+                        'humidity': float(latest_sensor.humidity) if latest_sensor and latest_sensor.humidity else None,
+                        'timestamp': latest_sensor.timestamp.strftime('%Y-%m-%d %H:%M:%S') if latest_sensor else None
+                    } if latest_sensor else None
+                },
+                'mqtt': {
+                    'connected': mqtt_connected,
+                    'broker': 'broker.hivemq.com',
+                    'port': 1883
+                },
+                'server_time': timezone.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+        })
+    except Exception as e:
+        logger.error(f"❌ GET System Status Error: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+# ========================================
+# Threshold Management API Endpoints
+# ========================================
+
+@csrf_exempt
+def api_threshold_settings(request):
+    """
+    API สำหรับจัดการ Threshold Settings
+    
+    GET: ดึงข้อมูล Threshold ปัจจุบัน พร้อมค่าเฉลี่ย
+    POST/PUT/PATCH: อัพเดท Threshold Settings
+    
+    POST/PUT/PATCH Body (JSON):
+    {
+        "temperature_high": 35.0,
+        "temperature_low": 20.0,
+        "humidity_high": 80.0,
+        "humidity_low": 30.0,
+        "mode": "AUTO" or "MANUAL",
+        "relay1_auto_enabled": true,
+        "hysteresis_percentage": 2.0,
+        "average_window": 10
+    }
+    
+    Response:
+    {
+        "success": true,
+        "data": {
+            "id": 1,
+            "temperature_high": 35.0,
+            "temperature_low": 20.0,
+            "humidity_high": 80.0,
+            "humidity_low": 30.0,
+            "mode": "AUTO",
+            "relay1_auto_enabled": true,
+            "alarm_active": false,
+            "alarm_reason": "",
+            "last_triggered": null,
+            "hysteresis_percentage": 2.0,
+            "average_window": 10,
+            "current_averages": {
+                "temperature": 28.5,
+                "humidity": 65.2
+            },
+            "latest_sensor": {
+                "temperature": 29.0,
+                "humidity": 66.0,
+                "timestamp": "2024-01-15 10:30:00"
+            },
+            "created_at": "2024-01-15 09:00:00",
+            "updated_at": "2024-01-15 10:00:00"
+        }
+    }
+    """
+    try:
+        # Get or create singleton ThresholdSetting
+        threshold = ThresholdSetting.get_or_create_default()
+        
+        # GET: Return current settings
+        if request.method == 'GET':
+            # Get current averages
+            avg_temp, avg_humidity = threshold.get_current_averages()
+            
+            # Get latest sensor
+            latest_sensor = SensorData.objects.order_by('-timestamp').first()
+            
+            return JsonResponse({
+                'success': True,
+                'data': {
+                    'id': threshold.id,
+                    'temperature_high': float(threshold.temperature_high),
+                    'temperature_low': float(threshold.temperature_low),
+                    'humidity_high': float(threshold.humidity_high),
+                    'humidity_low': float(threshold.humidity_low),
+                    'mode': threshold.mode,
+                    'mode_display': threshold.get_mode_display_thai(),
+                    'relay1_auto_enabled': threshold.relay1_auto_enabled,
+                    'alarm_active': threshold.alarm_active,
+                    'alarm_status_display': threshold.get_alarm_status_display(),
+                    'alarm_reason': threshold.alarm_reason,
+                    'last_triggered': threshold.last_triggered.strftime('%Y-%m-%d %H:%M:%S') if threshold.last_triggered else None,
+                    'hysteresis_percentage': float(threshold.hysteresis_percentage),
+                    'average_window': threshold.average_window,
+                    'current_averages': {
+                        'temperature': round(float(avg_temp), 2) if avg_temp else None,
+                        'humidity': round(float(avg_humidity), 2) if avg_humidity else None
+                    },
+                    'latest_sensor': {
+                        'temperature': float(latest_sensor.temperature) if latest_sensor and latest_sensor.temperature else None,
+                        'humidity': float(latest_sensor.humidity) if latest_sensor and latest_sensor.humidity else None,
+                        'timestamp': latest_sensor.timestamp.strftime('%Y-%m-%d %H:%M:%S') if latest_sensor else None
+                    } if latest_sensor else None,
+                    'created_at': threshold.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                    'updated_at': threshold.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+                }
+            })
+        
+        # POST/PUT/PATCH: Update settings
+        if request.method in ['POST', 'PUT', 'PATCH']:
+            try:
+                data = json.loads(request.body)
+            except json.JSONDecodeError:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Invalid JSON format'
+                }, status=400)
+            
+            # Update fields if provided
+            if 'temperature_high' in data:
+                threshold.temperature_high = float(data['temperature_high'])
+            if 'temperature_low' in data:
+                threshold.temperature_low = float(data['temperature_low'])
+            if 'humidity_high' in data:
+                threshold.humidity_high = float(data['humidity_high'])
+            if 'humidity_low' in data:
+                threshold.humidity_low = float(data['humidity_low'])
+            if 'mode' in data:
+                mode = data['mode'].upper()
+                if mode not in ['AUTO', 'MANUAL']:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Invalid mode. Must be AUTO or MANUAL'
+                    }, status=400)
+                threshold.mode = mode
+            if 'relay1_auto_enabled' in data:
+                threshold.relay1_auto_enabled = bool(data['relay1_auto_enabled'])
+            if 'hysteresis_percentage' in data:
+                threshold.hysteresis_percentage = float(data['hysteresis_percentage'])
+            if 'average_window' in data:
+                threshold.average_window = int(data['average_window'])
+            
+            threshold.save()
+            
+            logger.info(f"✅ Threshold Settings Updated: Mode={threshold.mode}, Temp={threshold.temperature_low}~{threshold.temperature_high}°C, Hum={threshold.humidity_low}~{threshold.humidity_high}%")
+            
+            # Return updated settings
+            avg_temp, avg_humidity = threshold.get_current_averages()
+            latest_sensor = SensorData.objects.order_by('-timestamp').first()
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Threshold settings updated successfully',
+                'data': {
+                    'id': threshold.id,
+                    'temperature_high': float(threshold.temperature_high),
+                    'temperature_low': float(threshold.temperature_low),
+                    'humidity_high': float(threshold.humidity_high),
+                    'humidity_low': float(threshold.humidity_low),
+                    'mode': threshold.mode,
+                    'mode_display': threshold.get_mode_display_thai(),
+                    'relay1_auto_enabled': threshold.relay1_auto_enabled,
+                    'alarm_active': threshold.alarm_active,
+                    'alarm_status_display': threshold.get_alarm_status_display(),
+                    'alarm_reason': threshold.alarm_reason,
+                    'last_triggered': threshold.last_triggered.strftime('%Y-%m-%d %H:%M:%S') if threshold.last_triggered else None,
+                    'hysteresis_percentage': float(threshold.hysteresis_percentage),
+                    'average_window': threshold.average_window,
+                    'current_averages': {
+                        'temperature': round(float(avg_temp), 2) if avg_temp else None,
+                        'humidity': round(float(avg_humidity), 2) if avg_humidity else None
+                    },
+                    'latest_sensor': {
+                        'temperature': float(latest_sensor.temperature) if latest_sensor and latest_sensor.temperature else None,
+                        'humidity': float(latest_sensor.humidity) if latest_sensor and latest_sensor.humidity else None,
+                        'timestamp': latest_sensor.timestamp.strftime('%Y-%m-%d %H:%M:%S') if latest_sensor else None
+                    } if latest_sensor else None,
+                    'created_at': threshold.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                    'updated_at': threshold.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+                }
+            })
+        
+        # Other methods not allowed
+        return JsonResponse({
+            'success': False,
+            'error': 'Method not allowed. Use GET, POST, PUT, or PATCH'
+        }, status=405)
+        
+    except Exception as e:
+        logger.error(f"❌ Threshold Settings API Error: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def api_threshold_check(request):
+    """
+    API สำหรับตรวจสอบ Threshold กับ Sensor Data ล่าสุด
+    
+    GET: ตรวจสอบว่า Sensor Data ล่าสุดเกิน Threshold หรือไม่
+    
+    Response:
+    {
+        "success": true,
+        "data": {
+            "threshold_exceeded": true,
+            "should_trigger_alarm": true,
+            "reason": "🌡️ อุณหภูมิสูง: 36.5°C > 35.0°C",
+            "current_sensor": {
+                "temperature": 36.5,
+                "humidity": 75.0,
+                "timestamp": "2024-01-15 10:30:00"
+            },
+            "averages": {
+                "temperature": 30.2,
+                "humidity": 68.5
+            },
+            "threshold_settings": {
+                "temperature_high": 35.0,
+                "temperature_low": 20.0,
+                "humidity_high": 80.0,
+                "humidity_low": 30.0,
+                "mode": "AUTO"
+            }
+        }
+    }
+    """
+    try:
+        if request.method != 'GET':
+            return JsonResponse({
+                'success': False,
+                'error': 'Method not allowed. Use GET'
+            }, status=405)
+        
+        # Get threshold settings
+        threshold = ThresholdSetting.get_or_create_default()
+        
+        # Get latest sensor data
+        latest_sensor = SensorData.objects.order_by('-timestamp').first()
+        
+        if not latest_sensor:
+            return JsonResponse({
+                'success': False,
+                'error': 'No sensor data available'
+            }, status=404)
+        
+        # Check threshold
+        check_result = threshold.check_threshold(latest_sensor)
+        
+        return JsonResponse({
+            'success': True,
+            'data': {
+                'threshold_exceeded': check_result['should_trigger'],
+                'should_trigger_alarm': threshold.should_activate_alarm(latest_sensor),
+                'reason': check_result['reason'],
+                'current_sensor': {
+                    'temperature': check_result['temperature'],
+                    'humidity': check_result['humidity'],
+                    'timestamp': latest_sensor.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                },
+                'averages': {
+                    'temperature': round(float(check_result['avg_temperature']), 2) if check_result['avg_temperature'] else None,
+                    'humidity': round(float(check_result['avg_humidity']), 2) if check_result['avg_humidity'] else None
+                },
+                'threshold_settings': {
+                    'temperature_high': float(threshold.temperature_high),
+                    'temperature_low': float(threshold.temperature_low),
+                    'humidity_high': float(threshold.humidity_high),
+                    'humidity_low': float(threshold.humidity_low),
+                    'mode': threshold.mode,
+                    'relay1_auto_enabled': threshold.relay1_auto_enabled,
+                    'alarm_active': threshold.alarm_active
+                }
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ Threshold Check API Error: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def api_threshold_reset(request):
+    """
+    API สำหรับรีเซ็ต Alarm (ปิด Alarm และ Relay 1)
+    
+    POST: รีเซ็ต Alarm และปิด Relay 1
+    
+    Response:
+    {
+        "success": true,
+        "message": "Alarm reset successfully",
+        "data": {
+            "alarm_active": false,
+            "relay1_status": false
+        }
+    }
+    """
+    try:
+        if request.method != 'POST':
+            return JsonResponse({
+                'success': False,
+                'error': 'Method not allowed. Use POST'
+            }, status=405)
+        
+        # Get threshold settings
+        threshold = ThresholdSetting.get_or_create_default()
+        
+        # Deactivate alarm
+        threshold.deactivate_alarm()
+        
+        # Turn off Relay 1
+        relay_controller, created = Relay.objects.get_or_create(
+            name="ESP32 Relay Controller",
+            defaults={
+                'relay1_status': False,
+                'relay2_status': False,
+                'relay3_status': False
+            }
+        )
+        
+        relay_controller.relay1_status = False
+        relay_controller.last_updated = timezone.now()
+        relay_controller.save()
+        
+        # Send MQTT command to turn off relay
+        send_relay_command(1, 'OFF')
+        
+        logger.info("✅ Alarm Reset: Relay 1 turned OFF")
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Alarm reset successfully. Relay 1 turned OFF.',
+            'data': {
+                'alarm_active': threshold.alarm_active,
+                'relay1_status': relay_controller.relay1_status
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ Threshold Reset API Error: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)

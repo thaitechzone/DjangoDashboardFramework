@@ -1,0 +1,438 @@
+<!-- 
+    🚨 THRESHOLD CONFIGURATION CARD
+    นำไปใส่ใน dashboard_simple.html หลัง Relay Controller Section (ประมาณบรรทัด 558)
+    และเพิ่ม CSS + JavaScript ตาม THRESHOLD_FEATURE.md
+-->
+
+<!-- ========================================
+     CSS STYLES (เพิ่มใน <style> tag ก่อน </style>)
+     ======================================== -->
+<style>
+/* Threshold Configuration Card */
+.threshold-section {
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    margin-bottom: 30px;
+}
+
+.threshold-section h2 {
+    color: #333;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.threshold-config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.threshold-input-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.threshold-input-group label {
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: #555;
+}
+
+.threshold-input-group input {
+    padding: 10px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    font-size: 16px;
+    transition: border-color 0.3s ease;
+}
+
+.threshold-input-group input:focus {
+    outline: none;
+    border-color: #4ecdc4;
+}
+
+.mode-selector {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    justify-content: center;
+    margin: 20px 0;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 10px;
+}
+
+.mode-button {
+    padding: 12px 30px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    background: white;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.mode-button.active {
+    background: #28a745;
+    color: white;
+    border-color: #28a745;
+}
+
+.mode-button.auto.active {
+    background: #007bff;
+    border-color: #007bff;
+}
+
+.alarm-status {
+    text-align: center;
+    padding: 15px;
+    margin: 15px 0;
+    border-radius: 10px;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.alarm-status.active {
+    background: #dc3545;
+    color: white;
+}
+
+.alarm-status.normal {
+    background: #28a745;
+    color: white;
+}
+
+.threshold-averages {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin: 15px 0;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 10px;
+}
+
+.average-item {
+    text-align: center;
+}
+
+.average-value {
+    font-size: 24px;
+    font-weight: bold;
+    margin: 5px 0;
+}
+
+.average-value.temp {
+    color: #ff6b6b;
+}
+
+.average-value.hum {
+    color: #4ecdc4;
+}
+
+.threshold-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+@media (max-width: 768px) {
+    .threshold-config-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .mode-selector {
+        flex-direction: column;
+    }
+}
+</style>
+
+
+<!-- ========================================
+     HTML CARD (เพิ่มหลัง Relay Controller Section)
+     ======================================== -->
+
+<!-- Threshold Configuration Section -->
+<div class="threshold-section">
+    <h2>🚨 Threshold Alarm Configuration</h2>
+    
+    <!-- Current Averages -->
+    <div class="threshold-averages" id="threshold-averages">
+        <div class="average-item">
+            <div style="font-size: 14px; color: #666;">📊 Average Temperature</div>
+            <div class="average-value temp" id="avg-temp">--°C</div>
+        </div>
+        <div class="average-item">
+            <div style="font-size: 14px; color: #666;">📊 Average Humidity</div>
+            <div class="average-value hum" id="avg-hum">--%</div>
+        </div>
+    </div>
+    
+    <!-- Alarm Status -->
+    <div class="alarm-status normal" id="alarm-status">
+        ✅ ปกติ (Normal)
+    </div>
+    
+    <!-- Mode Selector -->
+    <div class="mode-selector">
+        <span style="font-weight: bold;">โหมดการทำงาน:</span>
+        <button class="mode-button active" id="mode-manual" onclick="setMode('MANUAL')">
+            👤 MANUAL
+        </button>
+        <button class="mode-button auto" id="mode-auto" onclick="setMode('AUTO')">
+            🤖 AUTO
+        </button>
+    </div>
+    
+    <!-- Threshold Configuration -->
+    <div class="threshold-config-grid">
+        <!-- Temperature High -->
+        <div class="threshold-input-group">
+            <label for="temp-high">🌡️ อุณหภูมิสูงสุด (°C)</label>
+            <input type="number" id="temp-high" step="0.1" value="35.0" />
+        </div>
+        
+        <!-- Temperature Low -->
+        <div class="threshold-input-group">
+            <label for="temp-low">❄️ อุณหภูมิต่ำสุด (°C)</label>
+            <input type="number" id="temp-low" step="0.1" value="20.0" />
+        </div>
+        
+        <!-- Humidity High -->
+        <div class="threshold-input-group">
+            <label for="hum-high">💧 ความชื้นสูงสุด (%)</label>
+            <input type="number" id="hum-high" step="0.1" value="80.0" />
+        </div>
+        
+        <!-- Humidity Low -->
+        <div class="threshold-input-group">
+            <label for="hum-low">🏜️ ความชื้นต่ำสุด (%)</label>
+            <input type="number" id="hum-low" step="0.1" value="30.0" />
+        </div>
+    </div>
+    
+    <!-- Actions -->
+    <div class="threshold-actions">
+        <button class="btn btn-success" style="padding: 12px 30px; font-size: 16px;" onclick="saveThresholdSettings()">
+            💾 Save Settings
+        </button>
+        <button class="btn btn-warning" style="padding: 12px 30px; font-size: 16px;" onclick="loadThresholdSettings()">
+            🔄 Reload
+        </button>
+        <button class="btn btn-danger" style="padding: 12px 30px; font-size: 16px;" onclick="resetAlarm()">
+            🔕 Reset Alarm
+        </button>
+    </div>
+    
+    <div style="margin-top: 15px; text-align: center; font-size: 12px; color: #999;">
+        💡 AUTO mode: Relay 1 จะเปิดอัตโนมัติเมื่อค่าเกิน Threshold | MANUAL mode: ควบคุมด้วยมือ
+    </div>
+</div>
+
+
+<!-- ========================================
+     JAVASCRIPT (เพิ่มก่อน </body> tag)
+     ======================================== -->
+<script>
+// ========================================
+// Threshold Management Functions
+// ========================================
+
+let currentMode = 'MANUAL';
+
+// Load threshold settings from API
+async function loadThresholdSettings() {
+    try {
+        const response = await fetch('/api/v1/threshold/');
+        const result = await response.json();
+        
+        if (result.success) {
+            const data = result.data;
+            
+            // Update input fields
+            document.getElementById('temp-high').value = data.temperature_high;
+            document.getElementById('temp-low').value = data.temperature_low;
+            document.getElementById('hum-high').value = data.humidity_high;
+            document.getElementById('hum-low').value = data.humidity_low;
+            
+            // Update mode
+            currentMode = data.mode;
+            updateModeButtons(data.mode);
+            
+            // Update averages
+            if (data.current_averages.temperature) {
+                document.getElementById('avg-temp').textContent = 
+                    data.current_averages.temperature.toFixed(1) + '°C';
+            }
+            if (data.current_averages.humidity) {
+                document.getElementById('avg-hum').textContent = 
+                    data.current_averages.humidity.toFixed(1) + '%';
+            }
+            
+            // Update alarm status
+            const alarmDiv = document.getElementById('alarm-status');
+            if (data.alarm_active) {
+                alarmDiv.className = 'alarm-status active';
+                alarmDiv.innerHTML = '🚨 กำลังแจ้งเตือน (Alarm Active)<br>' +
+                    '<small style="font-size: 14px;">' + data.alarm_reason + '</small>';
+            } else {
+                alarmDiv.className = 'alarm-status normal';
+                alarmDiv.textContent = '✅ ปกติ (Normal)';
+            }
+            
+            console.log('✅ Threshold settings loaded');
+        }
+    } catch (error) {
+        console.error('❌ Load threshold error:', error);
+        if (typeof showUpdateIndicator === 'function') {
+            showUpdateIndicator('❌ Load failed', 'error');
+        }
+    }
+}
+
+// Save threshold settings
+async function saveThresholdSettings() {
+    try {
+        const settings = {
+            temperature_high: parseFloat(document.getElementById('temp-high').value),
+            temperature_low: parseFloat(document.getElementById('temp-low').value),
+            humidity_high: parseFloat(document.getElementById('hum-high').value),
+            humidity_low: parseFloat(document.getElementById('hum-low').value),
+            mode: currentMode,
+            relay1_auto_enabled: true
+        };
+        
+        const response = await fetch('/api/v1/threshold/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(settings)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            if (typeof showUpdateIndicator === 'function') {
+                showUpdateIndicator('✅ Settings saved', 'success');
+            } else {
+                alert('✅ Settings saved successfully!');
+            }
+            loadThresholdSettings(); // Reload to get updated values
+        } else {
+            if (typeof showUpdateIndicator === 'function') {
+                showUpdateIndicator('❌ Save failed: ' + result.error, 'error');
+            } else {
+                alert('❌ Save failed: ' + result.error);
+            }
+        }
+    } catch (error) {
+        console.error('❌ Save threshold error:', error);
+        if (typeof showUpdateIndicator === 'function') {
+            showUpdateIndicator('❌ Save failed', 'error');
+        } else {
+            alert('❌ Save failed');
+        }
+    }
+}
+
+// Set mode (AUTO/MANUAL)
+function setMode(mode) {
+    currentMode = mode;
+    updateModeButtons(mode);
+}
+
+// Update mode button styles
+function updateModeButtons(mode) {
+    const manualBtn = document.getElementById('mode-manual');
+    const autoBtn = document.getElementById('mode-auto');
+    
+    manualBtn.classList.remove('active');
+    autoBtn.classList.remove('active');
+    
+    if (mode === 'MANUAL') {
+        manualBtn.classList.add('active');
+    } else {
+        autoBtn.classList.add('active');
+    }
+}
+
+// Reset alarm
+async function resetAlarm() {
+    if (!confirm('ต้องการรีเซ็ต Alarm และปิด Relay 1 หรือไม่?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/v1/threshold/reset/', {
+            method: 'POST'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            if (typeof showUpdateIndicator === 'function') {
+                showUpdateIndicator('✅ Alarm reset', 'success');
+            } else {
+                alert('✅ Alarm reset successfully!');
+            }
+            loadThresholdSettings(); // Reload to get updated status
+            if (typeof refreshData === 'function') {
+                refreshData(); // Refresh all data
+            }
+        } else {
+            if (typeof showUpdateIndicator === 'function') {
+                showUpdateIndicator('❌ Reset failed: ' + result.error, 'error');
+            } else {
+                alert('❌ Reset failed: ' + result.error);
+            }
+        }
+    } catch (error) {
+        console.error('❌ Reset alarm error:', error);
+        if (typeof showUpdateIndicator === 'function') {
+            showUpdateIndicator('❌ Reset failed', 'error');
+        } else {
+            alert('❌ Reset failed');
+        }
+    }
+}
+
+// Load threshold settings on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadThresholdSettings();
+    
+    // Reload threshold settings every 10 seconds
+    setInterval(loadThresholdSettings, 10000);
+});
+</script>
+
+
+<!-- ========================================
+     INSTALLATION INSTRUCTIONS
+     ========================================
+     
+     1. เปิดไฟล์ dashboard_simple.html
+     
+     2. คัดลอก CSS (บรรทัด 11-149) ไปวางก่อน </style> tag (ประมาณบรรทัด 353)
+     
+     3. คัดลอก HTML Card (บรรทัด 156-223) ไปวางหลัง Relay Controller Section 
+        (หลังบรรทัด 558 ที่มี </div> ปิด relay-section-horizontal)
+        
+     4. คัดลอก JavaScript (บรรทัด 231-399) ไปวางก่อน </body> tag (ประมาณบรรทัด 899)
+     
+     5. บันทึกไฟล์แล้วรีเฟรช Dashboard
+     
+     6. ทดสอบ:
+        - ดูว่า Threshold Card แสดงผลหรือไม่
+        - กดปุ่ม Reload เพื่อโหลดค่า Threshold ปัจจุบัน
+        - ลองเปลี่ยน Mode ระหว่าง AUTO/MANUAL
+        - แก้ไขค่า Threshold แล้วกด Save
+        - ดูว่าค่าเฉลี่ยแสดงผลหรือไม่
+     
+     สำหรับรายละเอียดเพิ่มเติม ดูที่ THRESHOLD_FEATURE.md
+     ======================================== -->

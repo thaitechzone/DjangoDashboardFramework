@@ -72,6 +72,7 @@ def handle_relay_state_message(topic, message):
 def handle_sensor_data_message(topic, message):
     """
     จัดการข้อความ sensor data ที่ได้รับจาก ESP32
+    พร้อมตรวจสอบ Threshold และควบคุม Relay 1 อัตโนมัติ (ถ้าเปิดโหมด AUTO)
     
     Args:
         topic (str): MQTT topic
@@ -79,7 +80,8 @@ def handle_sensor_data_message(topic, message):
     """
     try:
         import json
-        from .models import SensorData
+        from .models import SensorData, ThresholdSetting
+        from .mqtt_manager import send_relay_command
         
         # Parse JSON
         data = json.loads(message)
@@ -93,6 +95,54 @@ def handle_sensor_data_message(topic, message):
         )
         
         logger.info(f"📊 Sensor data saved: Temp={sensor_data.temperature}°C, Hum={sensor_data.humidity}%")
+        
+        # ========================================
+        # AUTO THRESHOLD CONTROL
+        # ========================================
+        # ตรวจสอบ Threshold และควบคุม Relay 1 อัตโนมัติ
+        try:
+            threshold = ThresholdSetting.get_or_create_default()
+            
+            # ตรวจสอบเฉพาะเมื่อเปิดโหมด AUTO
+            if threshold.mode == 'AUTO' and threshold.relay1_auto_enabled:
+                check_result = threshold.check_threshold(sensor_data)
+                
+                # ตรวจสอบว่าควรเปิด Alarm หรือไม่
+                should_trigger = check_result['should_trigger']
+                
+                # ถ้าเกิน threshold และยังไม่ได้เปิด Alarm
+                if should_trigger and not threshold.alarm_active:
+                    logger.warning(f"🚨 THRESHOLD EXCEEDED: {check_result['reason']}")
+                    
+                    # เปิด Relay 1
+                    send_relay_command(1, 'ON')
+                    
+                    # อัพเดทสถานะ Alarm
+                    threshold.activate_alarm(reason=check_result['reason'])
+                    
+                    logger.info(f"✅ Auto-Control: Relay 1 turned ON (Alarm Activated)")
+                
+                # ถ้ากลับมาปกติและ Alarm เปิดอยู่
+                elif not should_trigger and threshold.alarm_active:
+                    logger.info(f"✅ THRESHOLD NORMALIZED: {check_result['reason']}")
+                    
+                    # ปิด Relay 1
+                    send_relay_command(1, 'OFF')
+                    
+                    # ปิด Alarm
+                    threshold.deactivate_alarm()
+                    
+                    logger.info(f"✅ Auto-Control: Relay 1 turned OFF (Alarm Deactivated)")
+                
+                # Log สถานะปัจจุบัน
+                else:
+                    if threshold.alarm_active:
+                        logger.debug(f"🔄 Alarm Active: Monitoring... (Temp={sensor_data.temperature}°C, Hum={sensor_data.humidity}%)")
+                    else:
+                        logger.debug(f"✅ Normal: No action needed (Temp={sensor_data.temperature}°C, Hum={sensor_data.humidity}%)")
+        
+        except Exception as threshold_error:
+            logger.error(f"❌ Threshold check error: {threshold_error}")
         
     except json.JSONDecodeError as e:
         logger.error(f"❌ Invalid JSON in sensor data: {message}")

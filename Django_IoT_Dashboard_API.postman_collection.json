@@ -1,0 +1,569 @@
+{
+	"info": {
+		"_postman_id": "django-iot-dashboard-api-v1",
+		"name": "Django IoT Dashboard API",
+		"description": "Complete REST API for Django IoT Dashboard - LED, Relay, and Sensor Data Management\n\n## Base URL\n- Development: `http://localhost:8000`\n- Production: `http://your-server.com`\n\n## Features\n- ✅ LED Control (GET status, POST commands)\n- ✅ Relay Control (GET status, POST commands for 3 relays)\n- ✅ Sensor Data (CRUD operations)\n- ✅ System Status (Complete overview)\n- ✅ Statistics (Sensor data analytics)\n\n## Authentication\nCurrently no authentication required (CSRF disabled for API)\n\n## Created by\nThaiTechZone - IoT Dashboard Project",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "LED Control",
+			"item": [
+				{
+					"name": "Get LED Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/led/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"led",
+								""
+							]
+						},
+						"description": "Get current LED status (ON/OFF)"
+					},
+					"response": []
+				},
+				{
+					"name": "Turn LED ON",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"command\": \"ON\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/led/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"led",
+								""
+							]
+						},
+						"description": "Turn LED ON via MQTT"
+					},
+					"response": []
+				},
+				{
+					"name": "Turn LED OFF",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"command\": \"OFF\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/led/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"led",
+								""
+							]
+						},
+						"description": "Turn LED OFF via MQTT"
+					},
+					"response": []
+				},
+				{
+					"name": "Toggle LED",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"command\": \"TOGGLE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/led/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"led",
+								""
+							]
+						},
+						"description": "Toggle LED state (ON→OFF or OFF→ON)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Relay Control",
+			"item": [
+				{
+					"name": "Get All Relays Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/relay/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"relay",
+								""
+							]
+						},
+						"description": "Get status of all 3 relays"
+					},
+					"response": []
+				},
+				{
+					"name": "Turn Relay 1 ON",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"relay_num\": 1,\n    \"command\": \"ON\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/relay/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"relay",
+								""
+							]
+						},
+						"description": "Turn Relay 1 ON via MQTT"
+					},
+					"response": []
+				},
+				{
+					"name": "Turn Relay 2 OFF",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"relay_num\": 2,\n    \"command\": \"OFF\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/relay/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"relay",
+								""
+							]
+						},
+						"description": "Turn Relay 2 OFF via MQTT"
+					},
+					"response": []
+				},
+				{
+					"name": "Toggle Relay 3",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"relay_num\": 3,\n    \"command\": \"TOGGLE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/relay/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"relay",
+								""
+							]
+						},
+						"description": "Toggle Relay 3 state"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Sensor Data",
+			"item": [
+				{
+					"name": "Get Latest Sensor Data",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/sensors/latest/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"sensors",
+								"latest",
+								""
+							]
+						},
+						"description": "Get the most recent sensor reading"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Sensor List (Default)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/sensors/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"sensors",
+								""
+							]
+						},
+						"description": "Get list of sensor data (default: 20 items, offset: 0)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Sensor List (Pagination)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/sensors/?limit=10&offset=0",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"sensors",
+								""
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Number of items per page"
+								},
+								{
+									"key": "offset",
+									"value": "0",
+									"description": "Starting position"
+								}
+							]
+						},
+						"description": "Get sensor data with pagination (limit & offset)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Sensor Statistics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/sensors/stats/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"sensors",
+								"stats",
+								""
+							]
+						},
+						"description": "Get sensor data statistics (avg, min, max)"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Sensor Data",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"temperature\": 28.5,\n    \"humidity\": 65.3,\n    \"device_name\": \"Test_Device\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/sensors/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"sensors",
+								""
+							]
+						},
+						"description": "Create new sensor data entry (for testing)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Sensor by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/sensors/1/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"sensors",
+								"1",
+								""
+							]
+						},
+						"description": "Get specific sensor data by ID"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Sensor Data",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"temperature\": 30.0,\n    \"humidity\": 70.5\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/sensors/1/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"sensors",
+								"1",
+								""
+							]
+						},
+						"description": "Update sensor data by ID"
+					},
+					"response": []
+				},
+				{
+					"name": "Partial Update Sensor",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"temperature\": 29.0\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/sensors/1/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"sensors",
+								"1",
+								""
+							]
+						},
+						"description": "Partially update sensor data (only specified fields)"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Sensor Data",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/sensors/1/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"sensors",
+								"1",
+								""
+							]
+						},
+						"description": "Delete sensor data by ID"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "System Status",
+			"item": [
+				{
+					"name": "Get System Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/system/status/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"system",
+								"status",
+								""
+							]
+						},
+						"description": "Get complete system status (LED, Relays, Sensors, MQTT)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Chart Data (Original)",
+			"item": [
+				{
+					"name": "Get Chart Data",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/chart-data/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"chart-data",
+								""
+							]
+						},
+						"description": "Get sensor data formatted for Chart.js (last 50 readings)"
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		}
+	]
+}
