@@ -14,11 +14,25 @@ logger = logging.getLogger(__name__)
 def dashboard_simple(request):
     """หน้า Dashboard แบบเรียบง่าย - ทำงานได้แน่นอน"""
     
-    # Get LED device
-    led_device, created = Device.objects.get_or_create(name="Onboard LED")
+    # Get selected board_id from query parameter or use default
+    selected_board = request.GET.get('board_id', 'v2_board')
     
-    # Get or create Relay controller
+    # Get all available boards from database
+    all_boards = set()
+    all_boards.update(Device.objects.values_list('board_id', flat=True).distinct())
+    all_boards.update(Relay.objects.values_list('board_id', flat=True).distinct())
+    all_boards.update(SensorData.objects.values_list('board_id', flat=True).distinct())
+    all_boards = sorted(list(all_boards))
+    
+    # Get LED device for selected board
+    led_device, created = Device.objects.get_or_create(
+        board_id=selected_board,
+        name="Onboard LED"
+    )
+    
+    # Get or create Relay controller for selected board
     relay_controller, created = Relay.objects.get_or_create(
+        board_id=selected_board,
         name="ESP32 Relay Controller",
         defaults={
             'relay1_status': False,
@@ -27,11 +41,11 @@ def dashboard_simple(request):
         }
     )
     
-    # Get latest sensor data
-    latest_sensor = SensorData.objects.order_by('-timestamp').first()
+    # Get latest sensor data for selected board
+    latest_sensor = SensorData.objects.filter(board_id=selected_board).order_by('-timestamp').first()
     
-    # Get recent 20 sensor data for charts
-    recent_sensors = SensorData.objects.order_by('-timestamp')[:20]
+    # Get recent 20 sensor data for charts for selected board
+    recent_sensors = SensorData.objects.filter(board_id=selected_board).order_by('-timestamp')[:20]
     
     context = {
         'led': led_device,
@@ -39,7 +53,9 @@ def dashboard_simple(request):
         'latest_sensor': latest_sensor,
         'recent_sensors': recent_sensors,
         'current_time': timezone.now(),
-        'total_readings': SensorData.objects.count(),
+        'total_readings': SensorData.objects.filter(board_id=selected_board).count(),
+        'selected_board': selected_board,
+        'all_boards': all_boards,
     }
     
     return render(request, 'iot_dashboard/dashboard_simple.html', context)
@@ -48,28 +64,32 @@ def control_led(request):
     """ควบคุม LED ผ่าน MQTT Manager"""
     if request.method == 'POST':
         action = request.POST.get('action')
+        board_id = request.POST.get('board_id', 'v2_board')
         
-        led_device, created = Device.objects.get_or_create(name="Onboard LED")
+        led_device, created = Device.objects.get_or_create(
+            board_id=board_id,
+            name="Onboard LED"
+        )
         
         try:
             # กำหนดคำสั่งและสถานะใหม่
             if action == 'on':
                 command = 'ON'
                 new_state = True
-                success_msg = '🟢 ส่งคำสั่งเปิด LED สำเร็จ!'
+                success_msg = f'🟢 [{board_id}] ส่งคำสั่งเปิด LED สำเร็จ!'
                 
             elif action == 'off':
                 command = 'OFF'
                 new_state = False
-                success_msg = '🔴 ส่งคำสั่งปิด LED สำเร็จ!'
+                success_msg = f'🔴 [{board_id}] ส่งคำสั่งปิด LED สำเร็จ!'
                 
             else:
                 messages.error(request, '❌ คำสั่งไม่ถูกต้อง')
                 return redirect('dashboard_simple')
             
-            # ส่งคำสั่งผ่าน MQTT Manager
-            logger.info(f"🎮 Sending command: {command}")
-            success, result_msg = send_led_command(command)
+            # ส่งคำสั่งผ่าน MQTT Manager with board_id
+            logger.info(f"🎮 Sending command to [{board_id}]: {command}")
+            success, result_msg = send_led_command(command, board_id)
             
             if success:
                 # อัพเดทสถานะใน database
@@ -78,24 +98,26 @@ def control_led(request):
                 led_device.save()
                 
                 messages.success(request, success_msg)
-                logger.info(f"✅ LED command successful: {command}")
+                logger.info(f"✅ [{board_id}] LED command successful: {command}")
             else:
                 messages.error(request, f'❌ ส่งคำสั่งไม่สำเร็จ: {result_msg}')
-                logger.error(f"❌ LED command failed: {result_msg}")
+                logger.error(f"❌ [{board_id}] LED command failed: {result_msg}")
                 
         except Exception as e:
             messages.error(request, f'❌ เกิดข้อผิดพลาด: {str(e)}')
             logger.error(f"❌ Error in control_led: {e}")
     
-    return redirect('dashboard_simple')
+    return redirect('dashboard_simple' + f'?board_id={board_id}')
 
 def control_relay(request):
     """ควบคุม RELAY 1, 2, 3 ผ่าน MQTT Manager"""
     if request.method == 'POST':
         relay_num = request.POST.get('relay_num')  # '1', '2', '3'
         action = request.POST.get('action')  # 'on', 'off', 'toggle'
+        board_id = request.POST.get('board_id', 'v2_board')
         
         relay_controller, created = Relay.objects.get_or_create(
+            board_id=board_id,
             name="ESP32 Relay Controller",
             defaults={
                 'relay1_status': False,
@@ -117,32 +139,32 @@ def control_relay(request):
                 relay_name = "RELAY 3"
             else:
                 messages.error(request, '❌ หมายเลข Relay ไม่ถูกต้อง')
-                return redirect('dashboard_simple')
+                return redirect('dashboard_simple' + f'?board_id={board_id}')
             
             # กำหนดคำสั่งและสถานะใหม่
             if action == 'on':
                 new_state = True
                 mqtt_command = 'ON'
-                success_msg = f'🟢 ส่งคำสั่งเปิด {relay_name} สำเร็จ!'
+                success_msg = f'🟢 [{board_id}] ส่งคำสั่งเปิด {relay_name} สำเร็จ!'
                 
             elif action == 'off':
                 new_state = False
                 mqtt_command = 'OFF'
-                success_msg = f'🔴 ส่งคำสั่งปิด {relay_name} สำเร็จ!'
+                success_msg = f'🔴 [{board_id}] ส่งคำสั่งปิด {relay_name} สำเร็จ!'
                 
             elif action == 'toggle':
                 new_state = not current_status
                 mqtt_command = 'ON' if new_state else 'OFF'
-                success_msg = f'🔄 ส่งคำสั่ง Toggle {relay_name} เป็น {"เปิด" if new_state else "ปิด"}!'
+                success_msg = f'🔄 [{board_id}] ส่งคำสั่ง Toggle {relay_name} เป็น {"เปิด" if new_state else "ปิด"}!'
             else:
                 messages.error(request, '❌ คำสั่งไม่ถูกต้อง')
-                return redirect('dashboard_simple')
+                return redirect('dashboard_simple' + f'?board_id={board_id}')
             
-            # ส่งคำสั่งผ่าน MQTT Manager
-            logger.info(f"🎮 Sending RELAY {relay_num} command: {mqtt_command}")
+            # ส่งคำสั่งผ่าน MQTT Manager with board_id
+            logger.info(f"🎮 Sending [{board_id}] RELAY {relay_num} command: {mqtt_command}")
             
-            # ใช้ฟังก์ชัน send_relay_command
-            success, result_msg = send_relay_command(int(relay_num), mqtt_command)
+            # ใช้ฟังก์ชัน send_relay_command with board_id
+            success, result_msg = send_relay_command(int(relay_num), mqtt_command, board_id)
             
             if success:
                 # อัพเดทสถานะใน database
@@ -157,7 +179,7 @@ def control_relay(request):
                 relay_controller.save()
                 
                 messages.success(request, success_msg)
-                logger.info(f"✅ RELAY command successful: {mqtt_command} to RELAY {relay_num}")
+                logger.info(f"✅ [{board_id}] RELAY command successful: {mqtt_command} to RELAY {relay_num}")
             else:
                 messages.error(request, f'❌ ส่งคำสั่งไม่สำเร็จ: {result_msg}')
                 logger.error(f"❌ RELAY command failed: {result_msg}")
@@ -166,15 +188,23 @@ def control_relay(request):
             messages.error(request, f'❌ เกิดข้อผิดพลาด: {str(e)}')
             logger.error(f"❌ Error in control_relay: {e}")
     
-    return redirect('dashboard_simple')
+    return redirect('dashboard_simple' + f'?board_id={board_id}')
 
 @csrf_exempt
 def api_sensor_data(request):
     """API สำหรับดึงข้อมูล sensor - แบบง่าย"""
     try:
+        # Get board_id from request parameter
+        board_id = request.GET.get('board_id', None)
+        
         # ดึงข้อมูล sensor ล่าสุด
         limit = int(request.GET.get('limit', 20))
-        sensors = SensorData.objects.order_by('-timestamp')[:limit]
+        
+        # Filter by board_id if provided
+        if board_id:
+            sensors = SensorData.objects.filter(board_id=board_id).order_by('-timestamp')[:limit]
+        else:
+            sensors = SensorData.objects.order_by('-timestamp')[:limit]
         
         data = []
         for sensor in sensors:

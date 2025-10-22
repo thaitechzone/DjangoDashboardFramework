@@ -2,13 +2,17 @@ from django.db import models
 from django.utils import timezone
 
 class Device(models.Model):
-    name = models.CharField(max_length=100, unique=True)
+    board_id = models.CharField(max_length=50, default="v2_board", help_text="Unique identifier for the ESP32 board")
+    name = models.CharField(max_length=100)
     is_on = models.BooleanField(default=False)
     last_updated = models.DateTimeField(default=timezone.now)
     created_at = models.DateTimeField(default=timezone.now)
+    
+    class Meta:
+        unique_together = ['board_id', 'name']
 
     def __str__(self):
-        return f"{self.name} is {'ON' if self.is_on else 'OFF'}"
+        return f"[{self.board_id}] {self.name} is {'ON' if self.is_on else 'OFF'}"
     
     def get_status_display(self):
         return "🟢 ON" if self.is_on else "⚫ OFF"
@@ -22,6 +26,7 @@ class Device(models.Model):
 
 class Relay(models.Model):
     """Model สำหรับควบคุม RELAY 3 ตัว"""
+    board_id = models.CharField(max_length=50, default="v2_board", help_text="Unique identifier for the ESP32 board")
     name = models.CharField(max_length=100, default="Relay Control")
     relay1_status = models.BooleanField(default=False, verbose_name="RELAY 1")
     relay2_status = models.BooleanField(default=False, verbose_name="RELAY 2")
@@ -32,9 +37,10 @@ class Relay(models.Model):
     class Meta:
         verbose_name = "Relay Controller"
         verbose_name_plural = "Relay Controllers"
+        unique_together = ['board_id', 'name']
     
     def __str__(self):
-        return f"{self.name} - R1:{'ON' if self.relay1_status else 'OFF'} R2:{'ON' if self.relay2_status else 'OFF'} R3:{'ON' if self.relay3_status else 'OFF'}"
+        return f"[{self.board_id}] {self.name} - R1:{'ON' if self.relay1_status else 'OFF'} R2:{'ON' if self.relay2_status else 'OFF'} R3:{'ON' if self.relay3_status else 'OFF'}"
     
     def get_relay1_display(self):
         return "🟢 ON" if self.relay1_status else "⚫ OFF"
@@ -53,6 +59,7 @@ class Relay(models.Model):
 
 
 class SensorData(models.Model):
+    board_id = models.CharField(max_length=50, default="v2_board", help_text="Unique identifier for the ESP32 board")
     device_name = models.CharField(max_length=100, default="ESP32_DHT22")
     temperature = models.FloatField(null=True, blank=True)
     humidity = models.FloatField(null=True, blank=True)
@@ -60,9 +67,12 @@ class SensorData(models.Model):
     
     class Meta:
         ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['board_id', '-timestamp']),
+        ]
         
     def __str__(self):
-        return f"{self.device_name}: {self.temperature}°C, {self.humidity}% - {self.timestamp}"
+        return f"[{self.board_id}] {self.device_name}: {self.temperature}°C, {self.humidity}% - {self.timestamp}"
     
     def get_timestamp_thai(self):
         """แสดงเวลาในรูปแบบภาษาไทย"""
