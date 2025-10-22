@@ -299,6 +299,69 @@
             color: #666;
         }
         
+        .decision-rules {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+        }
+        
+        .rules-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .rule-section {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 10px;
+            padding: 20px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .rule-section h3 {
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .rule-section ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .rule-section li {
+            padding: 10px 0;
+            color: #555;
+            font-size: 15px;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .rule-section li:last-child {
+            border-bottom: none;
+        }
+        
+        .rule-section strong {
+            color: #667eea;
+            font-weight: 600;
+        }
+        
+        .rules-note {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            border-radius: 5px;
+            color: #856404;
+            font-size: 14px;
+        }
+        
         .control-panel {
             background: white;
             border-radius: 15px;
@@ -497,6 +560,44 @@
             </div>
         </div>
         
+        <!-- AI Decision Rules -->
+        <div class="decision-rules">
+            <h2>🧠 AI Decision Rules</h2>
+            <div class="rules-container">
+                <div class="rule-section">
+                    <h3>🟢 Turn ON Relay 2 When:</h3>
+                    <ul>
+                        <li>🌡️ Temperature <strong>> 32°C</strong> AND Humidity <strong>> 70%</strong></li>
+                        <li>🌧️ Rain probability <strong>> 60%</strong></li>
+                        <li>⛈️ Thunderstorm or heavy rain expected</li>
+                        <li>🔥 Extreme weather conditions detected</li>
+                    </ul>
+                </div>
+                
+                <div class="rule-section">
+                    <h3>⚫ Turn OFF Relay 2 When:</h3>
+                    <ul>
+                        <li>🌡️ Temperature <strong>< 30°C</strong> AND Humidity <strong>< 60%</strong></li>
+                        <li>☀️ Clear weather with low rain probability</li>
+                        <li>✅ Good weather conditions</li>
+                    </ul>
+                </div>
+                
+                <div class="rule-section">
+                    <h3>🤔 AI Considers:</h3>
+                    <ul>
+                        <li>🌡️ Comfort level (feels-like temperature)</li>
+                        <li>⚡ Energy efficiency</li>
+                        <li>📊 Weather trends and patterns</li>
+                        <li>💧 Cloud coverage and wind speed</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="rules-note">
+                <strong>ℹ️ Note:</strong> AI uses Google Gemini to analyze these conditions and may make contextual decisions beyond simple rules.
+            </div>
+        </div>
+
         <!-- Control Panel -->
         <div class="control-panel">
             <h2>🎮 Manual Control</h2>
