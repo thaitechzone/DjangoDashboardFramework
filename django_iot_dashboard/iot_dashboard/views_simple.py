@@ -178,11 +178,14 @@ def api_sensor_data(request):
         
         data = []
         for sensor in sensors:
+            # แปลงเป็น Bangkok timezone ก่อนส่ง
+            bangkok_time = timezone.localtime(sensor.timestamp, timezone=timezone.get_current_timezone())
+            
             data.append({
                 'id': sensor.id,
                 'temperature': float(sensor.temperature) if sensor.temperature is not None else None,
                 'humidity': float(sensor.humidity) if sensor.humidity is not None else None,
-                'timestamp': sensor.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                'timestamp': bangkok_time.isoformat(),  # ใช้ ISO format พร้อม timezone
                 'device_name': sensor.device_name
             })
         
@@ -214,7 +217,9 @@ def api_chart_data(request):
         }
         
         for sensor in reversed(sensors):  # เรียงจากเก่าไปใหม่
-            chart_data['labels'].append(sensor.timestamp.strftime('%H:%M:%S'))
+            # แปลงเป็น Bangkok timezone
+            bangkok_time = timezone.localtime(sensor.timestamp, timezone=timezone.get_current_timezone())
+            chart_data['labels'].append(bangkok_time.strftime('%H:%M:%S'))
             chart_data['temperature'].append(
                 float(sensor.temperature) if sensor.temperature is not None else None
             )
@@ -224,11 +229,20 @@ def api_chart_data(request):
         
         # ข้อมูลล่าสุด
         latest = sensors.first() if sensors else None
-        latest_data = {
-            'temperature': float(latest.temperature) if latest and latest.temperature else None,
-            'humidity': float(latest.humidity) if latest and latest.humidity else None,
-            'timestamp': latest.timestamp.strftime('%Y-%m-%d %H:%M:%S') if latest else None
-        }
+        if latest:
+            # แปลงเป็น Bangkok timezone
+            bangkok_time = timezone.localtime(latest.timestamp, timezone=timezone.get_current_timezone())
+            latest_data = {
+                'temperature': float(latest.temperature) if latest.temperature else None,
+                'humidity': float(latest.humidity) if latest.humidity else None,
+                'timestamp': bangkok_time.isoformat()  # ใช้ ISO format พร้อม timezone
+            }
+        else:
+            latest_data = {
+                'temperature': None,
+                'humidity': None,
+                'timestamp': None
+            }
         
         return JsonResponse({
             'success': True,
