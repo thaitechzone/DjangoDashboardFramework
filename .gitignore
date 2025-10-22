@@ -1,0 +1,4 @@
+django_iot_dashboard/venv/
+*.pyc
+__pycache__/
+*.sqlite3

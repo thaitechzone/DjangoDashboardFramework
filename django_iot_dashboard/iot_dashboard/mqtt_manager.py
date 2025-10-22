@@ -44,6 +44,22 @@ class MQTTManager:
         self.MQTT_BROKER = "broker.hivemq.com"
         self.MQTT_PORT = 1883
         
+        # Base topic prefix
+        self.TOPIC_PREFIX = "thaitechzone"
+        
+        # Default board_id (for backward compatibility)
+        self.DEFAULT_BOARD_ID = "v2_board"
+        # Base topic prefix
+        self.TOPIC_PREFIX = "thaitechzone"
+        
+        # Default board_id (for backward compatibility)
+        self.DEFAULT_BOARD_ID = "v2_board"
+        
+        # Tracked boards (will subscribe to all topics for these boards)
+        self.tracked_boards = set([self.DEFAULT_BOARD_ID])
+        
+        # Topics will be generated dynamically based on board_id
+        # Legacy static topics kept for backward compatibility
         # LED Topics
         self.LED_CONTROL_TOPIC = "thaitechzone/v2_board/control/led"
         self.LED_STATUS_TOPIC = "thaitechzone/v2_board/status/led"
@@ -83,6 +99,64 @@ class MQTTManager:
         self.initialized = True
         
         logger.info(f"🚀 MQTT Manager initialized with client ID: {self.client_id}")
+    
+    def get_topic(self, board_id, category, topic_type):
+        """
+        Generate MQTT topic dynamically based on board_id
+        
+        Args:
+            board_id (str): Board identifier
+            category (str): 'control', 'state', or 'sensor'
+            topic_type (str): e.g., 'led', 'relay1', 'relay2', 'relay3', 'data'
+            
+        Returns:
+            str: Complete MQTT topic
+        """
+        return f"{self.TOPIC_PREFIX}/{board_id}/{category}/{topic_type}"
+    
+    def add_board(self, board_id):
+        """
+        Add a board to track and subscribe to its topics
+        
+        Args:
+            board_id (str): Board identifier to track
+        """
+        if board_id not in self.tracked_boards:
+            self.tracked_boards.add(board_id)
+            logger.info(f"📋 Added board to tracking: {board_id}")
+            
+            # Subscribe to topics if already connected
+            if self.is_connected:
+                self._subscribe_board_topics(board_id)
+    
+    def remove_board(self, board_id):
+        """
+        Remove a board from tracking
+        
+        Args:
+            board_id (str): Board identifier to stop tracking
+        """
+        if board_id in self.tracked_boards and board_id != self.DEFAULT_BOARD_ID:
+            self.tracked_boards.discard(board_id)
+            logger.info(f"📋 Removed board from tracking: {board_id}")
+    
+    def get_tracked_boards(self):
+        """Get list of all tracked board IDs"""
+        return list(self.tracked_boards)
+    
+    def _subscribe_board_topics(self, board_id):
+        """Subscribe to all topics for a specific board"""
+        topics = [
+            (self.get_topic(board_id, "status", "led"), 1),
+            (self.get_topic(board_id, "state", "relay1"), 1),
+            (self.get_topic(board_id, "state", "relay2"), 1),
+            (self.get_topic(board_id, "state", "relay3"), 1),
+            (self.get_topic(board_id, "sensor", "data"), 1),
+        ]
+        
+        for topic, qos in topics:
+            result = self.client.subscribe(topic, qos)
+            logger.info(f"📥 Subscribed to board topic: {topic} (QoS: {qos})")
     
     def initialize(self):
         """เริ่มต้นการทำงานของ MQTT Manager"""
@@ -163,19 +237,10 @@ class MQTTManager:
         logger.debug(f"📤 Message published successfully (ID: {mid})")
     
     def _subscribe_to_topics(self):
-        """Subscribe to MQTT topics"""
-        topics = [
-            (self.LED_STATUS_TOPIC, 1),
-            (self.SENSOR_DATA_TOPIC, 1),
-            # Subscribe to RELAY state topics (รับสถานะจาก ESP32)
-            (self.RELAY1_STATE_TOPIC, 1),
-            (self.RELAY2_STATE_TOPIC, 1),
-            (self.RELAY3_STATE_TOPIC, 1)
-        ]
-        
-        for topic, qos in topics:
-            result = self.client.subscribe(topic, qos)
-            logger.info(f"📥 Subscribed to topic: {topic} (QoS: {qos})")
+        """Subscribe to MQTT topics for all tracked boards"""
+        # Subscribe to all tracked boards
+        for board_id in self.tracked_boards:
+            self._subscribe_board_topics(board_id)
     
     def _start_connection_thread(self):
         """เริ่ม thread สำหรับจัดการการเชื่อมต่อ"""
@@ -332,40 +397,43 @@ class MQTTManager:
             logger.error(f"❌ Error sending message: {e}")
             return False
     
-    def send_led_command(self, command):
+    def send_led_command(self, command, board_id=None):
         """
         ส่งคำสั่งควบคุม LED
         
         Args:
             command (str): คำสั่ง (ON/OFF)
+            board_id (str): Board identifier (optional, uses default if not provided)
             
         Returns:
             bool: True ถ้าส่งสำเร็จ
         """
-        return self.send_message(self.LED_CONTROL_TOPIC, command)
+        if board_id is None:
+            board_id = self.DEFAULT_BOARD_ID
+        
+        topic = self.get_topic(board_id, "control", "led")
+        return self.send_message(topic, command)
     
-    def send_relay_command(self, relay_num, command):
+    def send_relay_command(self, relay_num, command, board_id=None):
         """
         ส่งคำสั่งควบคุม RELAY
         
         Args:
             relay_num (int): หมายเลข RELAY (1, 2, 3)
             command (str): คำสั่ง (ON/OFF)
+            board_id (str): Board identifier (optional, uses default if not provided)
             
         Returns:
             bool: True ถ้าส่งสำเร็จ
         """
-        topic_map = {
-            1: self.RELAY1_CONTROL_TOPIC,
-            2: self.RELAY2_CONTROL_TOPIC,
-            3: self.RELAY3_CONTROL_TOPIC
-        }
+        if board_id is None:
+            board_id = self.DEFAULT_BOARD_ID
         
-        if relay_num not in topic_map:
+        if relay_num not in [1, 2, 3]:
             logger.error(f"❌ Invalid relay number: {relay_num}")
             return False
         
-        topic = topic_map[relay_num]
+        topic = self.get_topic(board_id, "control", f"relay{relay_num}")
         success = self.send_message(topic, command)
         
         if success:
@@ -445,19 +513,20 @@ def get_mqtt_manager():
         mqtt_manager = MQTTManager()
     return mqtt_manager
 
-def send_led_command(command):
+def send_led_command(command, board_id=None):
     """
     ส่งคำสั่งควบคุม LED ผ่าน MQTT Manager
     
     Args:
         command (str): คำสั่ง (ON/OFF)
+        board_id (str): Board identifier (optional)
         
     Returns:
         tuple: (success, message)
     """
     try:
         manager = get_mqtt_manager()
-        success = manager.send_led_command(command)
+        success = manager.send_led_command(command, board_id)
         
         if success:
             return True, f"Command '{command}' sent successfully"
@@ -468,20 +537,21 @@ def send_led_command(command):
         logger.error(f"❌ Error in send_led_command: {e}")
         return False, f"Error: {e}"
 
-def send_relay_command(relay_num, command):
+def send_relay_command(relay_num, command, board_id=None):
     """
     ส่งคำสั่งควบคุม RELAY ผ่าน MQTT Manager
     
     Args:
         relay_num (int): หมายเลข RELAY (1, 2, 3)
         command (str): คำสั่ง (ON/OFF)
+        board_id (str): Board identifier (optional)
         
     Returns:
         tuple: (success, message)
     """
     try:
         manager = get_mqtt_manager()
-        success = manager.send_relay_command(relay_num, command)
+        success = manager.send_relay_command(relay_num, command, board_id)
         
         if success:
             return True, f"RELAY {relay_num} command '{command}' sent successfully"
