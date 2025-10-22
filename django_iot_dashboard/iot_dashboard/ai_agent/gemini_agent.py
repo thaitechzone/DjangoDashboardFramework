@@ -82,15 +82,16 @@ class GeminiRelayAgent:
 
 **Decision Rules:**
 1. Turn ON if:
-   - Temperature > 32°C AND Humidity > 70%
-   - Rain probability > 60%
-   - Thunderstorm or heavy rain expected
+   - Temperature > 32°C AND Humidity < 50% (Hot and dry - needs ventilation)
+   - Temperature > 32°C AND Humidity > 70% (Hot and humid - needs cooling)
+   - Rain probability < 60% (Low rain - safe to operate)
    - Extreme weather conditions
 
 2. Turn OFF if:
-   - Temperature < 30°C AND Humidity < 60%
-   - Clear weather with low rain probability
-   - Good weather conditions
+   - Temperature < 30°C AND Humidity > 60% (Cool and humid - save energy)
+   - Rain probability > 60% (High rain - protect equipment)
+   - Thunderstorm or heavy rain expected
+   - Good weather conditions with no need for ventilation
 
 3. Consider:
    - Comfort level (feels_like temperature)
@@ -176,17 +177,25 @@ Now analyze and respond:"""
         rain_prob = weather.get('rain_probability', 0)
         
         # Simple rule-based logic
-        if temp > 32 and humidity > 70:
+        if temp > 32 and humidity < 50:
             decision = 'on'
-            reasoning = f'High temperature ({temp}°C) and humidity ({humidity}%). Using fallback logic.'
+            reasoning = f'Hot and dry conditions ({temp}°C, {humidity}%). Needs ventilation. Using fallback logic.'
             confidence = 0.7
-        elif rain_prob > 60:
+        elif temp > 32 and humidity > 70:
             decision = 'on'
-            reasoning = f'High rain probability ({rain_prob}%). Using fallback logic.'
+            reasoning = f'Hot and humid conditions ({temp}°C, {humidity}%). Needs cooling. Using fallback logic.'
+            confidence = 0.7
+        elif rain_prob < 60 and temp > 30:
+            decision = 'on'
+            reasoning = f'Low rain probability ({rain_prob}%) and warm weather. Safe to operate. Using fallback logic.'
             confidence = 0.6
-        elif temp < 30 and humidity < 60:
+        elif rain_prob > 60:
             decision = 'off'
-            reasoning = f'Comfortable temperature ({temp}°C) and humidity ({humidity}%). Using fallback logic.'
+            reasoning = f'High rain probability ({rain_prob}%). Protect equipment. Using fallback logic.'
+            confidence = 0.7
+        elif temp < 30 and humidity > 60:
+            decision = 'off'
+            reasoning = f'Cool and humid conditions ({temp}°C, {humidity}%). Save energy. Using fallback logic.'
             confidence = 0.7
         else:
             decision = 'off'

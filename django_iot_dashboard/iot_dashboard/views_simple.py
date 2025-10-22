@@ -804,7 +804,7 @@ def api_system_status(request):
         
         # Get MQTT status
         mqtt_manager = get_mqtt_manager()
-        mqtt_connected = mqtt_manager.is_connected() if mqtt_manager else False
+        mqtt_connected = mqtt_manager.is_connected if mqtt_manager else False
         
         return JsonResponse({
             'success': True,

@@ -466,7 +466,7 @@
     <div class="dashboard-container">
         <!-- Header -->
         <div class="dashboard-header">
-            <h1>🤖 AI Agent Dashboard</h1>
+            <h1>AI Agent Dashboard</h1>
             <div class="subtitle">
                 Weather-Based Intelligent Relay Control System
             </div>
@@ -567,19 +567,20 @@
                 <div class="rule-section">
                     <h3>🟢 Turn ON Relay 2 When:</h3>
                     <ul>
-                        <li>🌡️ Temperature <strong>> 32°C</strong> AND Humidity <strong>> 70%</strong></li>
-                        <li>🌧️ Rain probability <strong>> 60%</strong></li>
-                        <li>⛈️ Thunderstorm or heavy rain expected</li>
-                        <li>🔥 Extreme weather conditions detected</li>
+                        <li>🔥 Temperature <strong>> 32°C</strong> <strong>AND</strong> Humidity <strong>< 50%</strong> (Hot & dry - needs ventilation)</li>
+                        <li>🌡️ Temperature <strong>> 32°C</strong> <strong>AND</strong> Humidity <strong>> 70%</strong> (Hot & humid - needs cooling)</li>
+                        <li>☀️ Rain probability <strong>< 60%</strong> (Low rain - safe to operate)</li>
+                        <li>🌤️ Good weather conditions</li>
                     </ul>
                 </div>
                 
                 <div class="rule-section">
                     <h3>⚫ Turn OFF Relay 2 When:</h3>
                     <ul>
-                        <li>🌡️ Temperature <strong>< 30°C</strong> AND Humidity <strong>< 60%</strong></li>
-                        <li>☀️ Clear weather with low rain probability</li>
-                        <li>✅ Good weather conditions</li>
+                        <li>❄️ Temperature <strong>< 30°C</strong> <strong>AND</strong> Humidity <strong>> 60%</strong> (Cool & humid - save energy)</li>
+                        <li>🌧️ Rain probability <strong>> 60%</strong> (High rain - protect equipment)</li>
+                        <li>⛈️ Thunderstorm or heavy rain expected</li>
+                        <li>💧 Weather conditions with high moisture</li>
                     </ul>
                 </div>
                 
