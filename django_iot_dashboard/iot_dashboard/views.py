@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
+<<<<<<< Updated upstream
 from django.contrib import messages
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
@@ -9,6 +10,13 @@ import json
 import logging
 from .models import Device, SensorData, Relay
 from .mqtt_manager import get_mqtt_manager, send_led_command
+=======
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.middleware.csrf import get_token
+from django.views.decorators.http import require_http_methods
+from .models import Device
+import paho.mqtt.client as mqtt
+>>>>>>> Stashed changes
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -321,6 +329,7 @@ def api_control_relay(request):
             relay_num = data.get('relay_num')  # '1', '2', '3'
             action = data.get('action')  # 'on', 'off', 'toggle'
             
+<<<<<<< Updated upstream
             relay_controller, created = Relay.objects.get_or_create(
                 name="ESP32 Relay Controller",
                 defaults={
@@ -395,6 +404,29 @@ def api_control_relay(request):
                 'success': False,
                 'error': str(e)
             })
+=======
+    return render(request, 'iot_dashboard/test.html', {'message': message})
+
+@csrf_exempt  # ปิด CSRF สำหรับทดสอบ
+def simple_test_view(request):
+    """Ultra simple test view"""
+    print(f"🔍 Request method: {request.method}")
+    print(f"🔍 Request headers: {dict(request.headers)}")
+    
+    if request.method == 'POST':
+        print("🎯 SIMPLE TEST POST received!")
+        print(f"POST data: {dict(request.POST)}")
+        print(f"Raw POST: {request.body}")
+        
+        if 'led_on' in request.POST:
+            print("💡 SIMPLE LED ON command")
+            success = send_command("thaitechzone/v2_board/command/led", "ON")
+            print(f"💡 LED ON result: {success}")
+        elif 'led_off' in request.POST:
+            print("💡 SIMPLE LED OFF command") 
+            success = send_command("thaitechzone/v2_board/command/led", "OFF")
+            print(f"💡 LED OFF result: {success}")
+>>>>>>> Stashed changes
     
     return JsonResponse({'success': False, 'error': 'Invalid request method'})
 

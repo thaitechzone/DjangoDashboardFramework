@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ultra Simple Test</title>
+</head>
+<body>
+    <h1>Ultra Simple MQTT Test</h1>
+    <p><strong>Method:</strong> Testing POST form submission</p>
+    
+    <form method="post" action="/simple/" onsubmit="console.log('🚀 Form submitting...')">
+        <!-- ไม่ใช้ CSRF token เพื่อทดสอบ -->
+        <p>
+            <button type="submit" name="led_on" value="1" style="padding: 20px; background: green; color: white; font-size: 18px;">
+                💡 LED ON
+            </button>
+        </p>
+        <p>
+            <button type="submit" name="led_off" value="1" style="padding: 20px; background: red; color: white; font-size: 18px;">
+                💡 LED OFF  
+            </button>
+        </p>
+    </form>
+    
+    <hr>
+    <h2>Debug Info</h2>
+    <button onclick="testAjax()" style="padding: 10px; background: blue; color: white;">Test AJAX POST</button>
+    
+    <script>
+        console.log('✅ Simple test page loaded');
+        
+        // ทดสอบ AJAX POST
+        function testAjax() {
+            console.log('🧪 Testing AJAX POST...');
+            
+            fetch('/simple/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'led_on=1'
+            })
+            .then(response => {
+                console.log('✅ AJAX Response:', response.status);
+                return response.text();
+            })
+            .then(data => {
+                console.log('📄 Response data length:', data.length);
+            })
+            .catch(error => {
+                console.error('❌ AJAX Error:', error);
+            });
+        }
+        
+        // Log form events
+        document.querySelector('form').addEventListener('submit', function(e) {
+            console.log('📝 Form submit event triggered');
+            console.log('🎯 Action:', e.target.action);
+            console.log('📋 Method:', e.target.method);
+        });
+    </script>
+</body>
+</html>
