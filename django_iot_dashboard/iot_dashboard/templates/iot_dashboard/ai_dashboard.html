@@ -188,7 +188,7 @@
         }
         
         .timeline-item {
-            border-left: 3px solid #667eea;
+            border-left: 3px solid #b6b9c8ff;
             padding-left: 20px;
             margin-bottom: 20px;
             position: relative;
@@ -202,7 +202,7 @@
             width: 13px;
             height: 13px;
             border-radius: 50%;
-            background: #667eea;
+            background: #bcc0d4ff;
         }
         
         .timeline-item.decision-on::before {
@@ -290,7 +290,7 @@
         .stat-value {
             font-size: 32px;
             font-weight: bold;
-            color: #667eea;
+            color: #cbced8ff;
             margin: 10px 0;
         }
         
@@ -318,7 +318,7 @@
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
             border-radius: 10px;
             padding: 20px;
-            border-left: 4px solid #667eea;
+            border-left: 4px solid #cfd2e1ff;
         }
         
         .rule-section h3 {
@@ -348,7 +348,7 @@
         }
         
         .rule-section strong {
-            color: #667eea;
+            color: #cfd1dbff;
             font-weight: 600;
         }
         
@@ -388,12 +388,12 @@
         }
         
         .btn-primary {
-            background: #667eea;
+            background: #c2c4ccff;
             color: white;
         }
         
         .btn-primary:hover {
-            background: #5568d3;
+            background: #a8acbeff;
             transform: translateY(-2px);
         }
         
@@ -585,17 +585,27 @@
                 </div>
                 
                 <div class="rule-section">
-                    <h3>🤔 AI Considers:</h3>
+                    <h3>🤔 AI พิจารณาเพิ่มเติม:</h3>
                     <ul>
-                        <li>🌡️ Comfort level (feels-like temperature)</li>
-                        <li>⚡ Energy efficiency</li>
-                        <li>📊 Weather trends and patterns</li>
-                        <li>💧 Cloud coverage and wind speed</li>
+                        <li>🌡️ ความรู้สึกร้อน-เย็นจริง (Feels-like Temperature)</li>
+                        <li>💰 ประหยัดพลังงานไฟฟ้า</li>
+                        <li>� แนวโน้มอากาศ 3-6 ชั่วโมงข้างหน้า</li>
+                        <li>🌬️ ความเร็วลม / เมฆปกคลุม / ความชื้นในอากาศ</li>
                     </ul>
                 </div>
             </div>
             <div class="rules-note">
                 <strong>ℹ️ Note:</strong> AI uses Google Gemini to analyze these conditions and may make contextual decisions beyond simple rules.
+            </div>
+        </div>
+
+        <!-- AI Thinking Process (Step-by-Step) -->
+        <div class="decision-rules">
+            <h2>🧠 AI Thinking Process (Latest Decision)</h2>
+            <div id="ai-thinking-container" style="margin-top: 20px;">
+                <div style="text-align: center; padding: 40px; color: #999;">
+                    ⏳ Loading AI analysis...
+                </div>
             </div>
         </div>
 
@@ -654,7 +664,10 @@
         </div>
         
         <div class="chart-section">
-            <h2>🎯 Confidence Score Trend</h2>
+            <h2>🎯 Confidence Score Trend (Latest 50 Decisions)</h2>
+            <div style="font-size: 14px; color: #666; margin-bottom: 10px;">
+                🟢 Green = Turn ON Decision | 🔴 Red = Turn OFF Decision
+            </div>
             <div class="chart-wrapper">
                 <canvas id="confidenceChart"></canvas>
             </div>
@@ -791,6 +804,7 @@
                     // Update Weather
                     if (data.latest_decision && data.latest_decision.weather_data) {
                         updateWeatherDisplay(data.latest_decision.weather_data);
+                        updateAIThinking(data.latest_decision);
                     }
                 }
             } catch (error) {
@@ -830,6 +844,290 @@
                     iconEl.textContent = '🌤️';
                 }
             }
+            
+            // Update AI Additional Factors with real data
+            updateAIAdditionalFactors(weather);
+        }
+        
+        // Update AI Additional Technical Factors with real weather data
+        function updateAIAdditionalFactors(weather) {
+            const container = document.getElementById('ai-additional-factors');
+            if (!container) return;
+            
+            if (!weather) {
+                container.innerHTML = '<li style="text-align: center; color: #999;">No data available</li>';
+                return;
+            }
+            
+            const factors = [];
+            
+            // Feels-like temperature
+            if (weather.feels_like !== undefined) {
+                const diff = Math.abs(weather.temperature - weather.feels_like);
+                factors.push(`🌡️ <strong>Feels-like Temperature:</strong> ${weather.feels_like.toFixed(1)}°C (${diff > 2 ? 'significant difference' : 'similar to actual'})`);
+            }
+            
+            // Wind speed
+            if (weather.wind_speed !== undefined) {
+                const windLevel = weather.wind_speed < 3 ? 'calm' : weather.wind_speed < 7 ? 'moderate' : 'strong';
+                factors.push(`🌬️ <strong>Wind Speed:</strong> ${weather.wind_speed.toFixed(1)} m/s (${windLevel})`);
+            }
+            
+            // Cloud coverage
+            if (weather.clouds !== undefined) {
+                const cloudLevel = weather.clouds < 20 ? 'clear sky' : weather.clouds < 50 ? 'partly cloudy' : weather.clouds < 85 ? 'mostly cloudy' : 'overcast';
+                factors.push(`☁️ <strong>Cloud Coverage:</strong> ${weather.clouds}% (${cloudLevel})`);
+            }
+            
+            // Pressure (affects comfort)
+            if (weather.pressure !== undefined) {
+                const pressureStatus = weather.pressure < 1010 ? 'low (stormy)' : weather.pressure < 1020 ? 'normal' : 'high (stable)';
+                factors.push(`🌡️ <strong>Atmospheric Pressure:</strong> ${weather.pressure} hPa (${pressureStatus})`);
+            }
+            
+            // Visibility
+            if (weather.visibility !== undefined) {
+                const visKm = (weather.visibility / 1000).toFixed(1);
+                const visLevel = weather.visibility >= 10000 ? 'excellent' : weather.visibility >= 5000 ? 'good' : 'poor';
+                factors.push(`👁️ <strong>Visibility:</strong> ${visKm} km (${visLevel})`);
+            }
+            
+            // UV Index (if available)
+            if (weather.uvi !== undefined) {
+                const uviLevel = weather.uvi < 3 ? 'low' : weather.uvi < 6 ? 'moderate' : weather.uvi < 8 ? 'high' : 'very high';
+                factors.push(`☀️ <strong>UV Index:</strong> ${weather.uvi} (${uviLevel})`);
+            }
+            
+            // Time of day consideration
+            if (weather.sunrise && weather.sunset) {
+                const now = Date.now() / 1000;
+                const timeStatus = now < weather.sunrise ? 'before sunrise' : now < weather.sunset ? 'daytime' : 'nighttime';
+                factors.push(`🕐 <strong>Time Context:</strong> ${timeStatus} (affects energy needs)`);
+            }
+            
+            // Energy efficiency note
+            const temp = weather.temperature || 0;
+            const humidity = weather.humidity || 0;
+            let energyNote = '';
+            if (temp < 30 && humidity > 60) {
+                energyNote = 'Energy saving mode recommended';
+            } else if (temp > 32) {
+                energyNote = 'High energy consumption expected';
+            } else {
+                energyNote = 'Normal energy consumption';
+            }
+            factors.push(`💡 <strong>Energy Efficiency:</strong> ${energyNote}`);
+            
+            // Render factors
+            if (factors.length > 0) {
+                container.innerHTML = factors.map(f => `<li style="padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.05); font-size: 14px;">${f}</li>`).join('');
+            } else {
+                container.innerHTML = '<li style="text-align: center; color: #999;">Limited data available</li>';
+            }
+        }
+        
+        // Update AI Thinking Process (Step-by-Step)
+        function updateAIThinking(decision) {
+            const container = document.getElementById('ai-thinking-container');
+            
+            if (!decision || !decision.weather_data) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #999;">
+                        📭 No AI decision data available
+                    </div>
+                `;
+                return;
+            }
+            
+            const weather = decision.weather_data;
+            const temp = weather.temperature || 0;
+            const humidity = weather.humidity || 0;
+            const rainProb = weather.rain_probability || 0;
+            const finalDecision = decision.decision;
+            const confidence = (decision.confidence * 100).toFixed(1);
+            const reasoning = decision.reasoning || 'No reasoning provided';
+            
+            // Step 1: Input Data
+            let step1Status = '✅';
+            let step1Color = '#28a745';
+            
+            // Step 2: Temperature Analysis
+            let tempAnalysis = '';
+            let tempIcon = '';
+            let tempStatus = '';
+            let tempColor = '';
+            
+            if (temp > 32) {
+                tempAnalysis = `อุณหภูมิ ${temp}°C สูงเกินเกณฑ์ (> 32°C)`;
+                tempIcon = '🔥';
+                tempStatus = '→ แนะนำเปิด';
+                tempColor = '#ff6b6b';
+            } else if (temp < 30) {
+                tempAnalysis = `อุณหภูมิ ${temp}°C ต่ำกว่าเกณฑ์ (< 30°C)`;
+                tempIcon = '❄️';
+                tempStatus = '→ แนะนำปิด';
+                tempColor = '#4ecdc4';
+            } else {
+                tempAnalysis = `อุณหภูมิ ${temp}°C อยู่ในช่วงปกติ (30-32°C)`;
+                tempIcon = '🌡️';
+                tempStatus = '→ พิจารณาเพิ่มเติม';
+                tempColor = '#ffc107';
+            }
+            
+            // Step 3: Humidity Analysis
+            let humidityAnalysis = '';
+            let humidityIcon = '';
+            let humidityStatus = '';
+            let humidityColor = '';
+            
+            if (temp > 32 && humidity < 50) {
+                humidityAnalysis = `ความชื้น ${humidity}% ต่ำ (< 50%) + อุณหภูมิสูง`;
+                humidityIcon = '🏜️';
+                humidityStatus = '→ ร้อนและแห้ง ต้องระบายอากาศ';
+                humidityColor = '#ff6b6b';
+            } else if (temp > 32 && humidity > 70) {
+                humidityAnalysis = `ความชื้น ${humidity}% สูง (> 70%) + อุณหภูมิสูง`;
+                humidityIcon = '💦';
+                humidityStatus = '→ ร้อนและชื้น ต้องระบายความชื้น';
+                humidityColor = '#ff6b6b';
+            } else if (temp < 30 && humidity > 60) {
+                humidityAnalysis = `ความชื้น ${humidity}% สูง (> 60%) + อุณหภูมิต่ำ`;
+                humidityIcon = '💧';
+                humidityStatus = '→ เย็นและชื้น ประหยัดพลังงาน';
+                humidityColor = '#4ecdc4';
+            } else {
+                humidityAnalysis = `ความชื้น ${humidity}% อยู่ในระดับปกติ`;
+                humidityIcon = '💧';
+                humidityStatus = '→ พิจารณาปัจจัยอื่น';
+                humidityColor = '#ffc107';
+            }
+            
+            // Step 4: Rain Probability Analysis
+            let rainAnalysis = '';
+            let rainIcon = '';
+            let rainStatus = '';
+            let rainColor = '';
+            
+            if (rainProb < 60) {
+                rainAnalysis = `โอกาสฝนตก ${rainProb}% ต่ำ (< 60%)`;
+                rainIcon = '☀️';
+                rainStatus = '→ ปลอดภัยในการทำงาน';
+                rainColor = '#28a745';
+            } else {
+                rainAnalysis = `โอกาสฝนตก ${rainProb}% สูง (> 60%)`;
+                rainIcon = '🌧️';
+                rainStatus = '→ ควรปิดเพื่อป้องกันอุปกรณ์';
+                rainColor = '#dc3545';
+            }
+            
+            // Step 5: Final Decision
+            let finalIcon = finalDecision === 'on' ? '🟢' : '⚫';
+            let finalText = finalDecision === 'on' ? 'Turn ON' : 'Turn OFF';
+            let finalColor = finalDecision === 'on' ? '#28a745' : '#dc3545';
+            
+            container.innerHTML = `
+                <div style="display: flex; gap: 15px; overflow-x: auto; padding-bottom: 10px;">
+                    <!-- Step 1: Input Data -->
+                    <div class="rule-section" style="border-left-color: ${step1Color}; min-width: 220px; flex: 1;">
+                        <h3 style="color: ${step1Color}; font-size: 16px;">📥 Step 1:<br>ข้อมูลที่ได้รับ</h3>
+                        <ul style="list-style: none; padding: 0; margin: 15px 0;">
+                            <li style="padding: 6px 0; border-bottom: 1px solid rgba(0,0,0,0.05); font-size: 14px;">
+                                🌡️ <strong>${temp.toFixed(1)}°C</strong>
+                            </li>
+                            <li style="padding: 6px 0; border-bottom: 1px solid rgba(0,0,0,0.05); font-size: 14px;">
+                                💧 <strong>${humidity.toFixed(0)}%</strong>
+                            </li>
+                            <li style="padding: 6px 0; border-bottom: 1px solid rgba(0,0,0,0.05); font-size: 14px;">
+                                🌧️ <strong>${rainProb.toFixed(0)}%</strong>
+                            </li>
+                            <li style="padding: 6px 0; font-size: 13px; color: #999;">
+                                ${weather.description || '--'}
+                            </li>
+                        </ul>
+                        <div style="margin-top: auto; padding: 8px; background: rgba(40, 167, 69, 0.1); border-radius: 5px; color: ${step1Color}; font-weight: bold; font-size: 13px; text-align: center;">
+                            ${step1Status} ครบถ้วน
+                        </div>
+                    </div>
+                    
+                    <!-- Step 2: Temperature Analysis -->
+                    <div class="rule-section" style="border-left-color: ${tempColor}; min-width: 220px; flex: 1;">
+                        <h3 style="color: ${tempColor}; font-size: 16px;">🔍 Step 2:<br>วิเคราะห์อุณหภูมิ</h3>
+                        <div style="text-align: center; padding: 15px 0;">
+                            <div style="font-size: 42px; margin: 10px 0;">
+                                ${tempIcon}
+                            </div>
+                            <div style="font-size: 14px; color: #666; margin-bottom: 10px; line-height: 1.4;">
+                                ${tempAnalysis}
+                            </div>
+                            <div style="padding: 8px; background: rgba(${tempColor === '#ff6b6b' ? '255, 107, 107' : tempColor === '#4ecdc4' ? '78, 205, 196' : '255, 193, 7'}, 0.1); border-radius: 5px; font-weight: bold; color: ${tempColor}; font-size: 13px;">
+                                ${tempStatus}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 3: Humidity Analysis -->
+                    <div class="rule-section" style="border-left-color: ${humidityColor}; min-width: 220px; flex: 1;">
+                        <h3 style="color: ${humidityColor}; font-size: 16px;">🔍 Step 3:<br>วิเคราะห์ความชื้น</h3>
+                        <div style="text-align: center; padding: 15px 0;">
+                            <div style="font-size: 42px; margin: 10px 0;">
+                                ${humidityIcon}
+                            </div>
+                            <div style="font-size: 14px; color: #666; margin-bottom: 10px; line-height: 1.4;">
+                                ${humidityAnalysis}
+                            </div>
+                            <div style="padding: 8px; background: rgba(${humidityColor === '#ff6b6b' ? '255, 107, 107' : humidityColor === '#4ecdc4' ? '78, 205, 196' : '255, 193, 7'}, 0.1); border-radius: 5px; font-weight: bold; color: ${humidityColor}; font-size: 13px;">
+                                ${humidityStatus}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 4: Rain Analysis -->
+                    <div class="rule-section" style="border-left-color: ${rainColor}; min-width: 220px; flex: 1;">
+                        <h3 style="color: ${rainColor}; font-size: 16px;">🔍 Step 4:<br>วิเคราะห์โอกาสฝน</h3>
+                        <div style="text-align: center; padding: 15px 0;">
+                            <div style="font-size: 42px; margin: 10px 0;">
+                                ${rainIcon}
+                            </div>
+                            <div style="font-size: 14px; color: #666; margin-bottom: 10px; line-height: 1.4;">
+                                ${rainAnalysis}
+                            </div>
+                            <div style="padding: 8px; background: rgba(${rainColor === '#28a745' ? '40, 167, 69' : '220, 53, 69'}, 0.1); border-radius: 5px; font-weight: bold; color: ${rainColor}; font-size: 13px;">
+                                ${rainStatus}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 5: Final Decision -->
+                    <div class="rule-section" style="border-left-color: ${finalColor}; min-width: 280px; flex: 1.3;">
+                        <h3 style="color: ${finalColor}; font-size: 16px;">💡 Step 5:<br>การตัดสินใจ</h3>
+                        <div style="text-align: center; padding: 15px 0;">
+                            <div style="font-size: 56px; margin: 5px 0;">
+                                ${finalIcon}
+                            </div>
+                            <div style="font-size: 24px; font-weight: bold; color: ${finalColor}; margin: 5px 0;">
+                                ${finalText}
+                            </div>
+                            <div style="font-size: 13px; color: #666; margin: 10px 0; line-height: 1.4;">
+                                💭 ${reasoning}
+                            </div>
+                            <div style="margin-top: 10px;">
+                                <div style="font-size: 12px; color: #999; margin-bottom: 3px;">
+                                    ความมั่นใจ
+                                </div>
+                                <div style="font-size: 28px; font-weight: bold; color: #ffc107;">
+                                    🎯 ${confidence}%
+                                </div>
+                                <div class="confidence-bar" style="max-width: 200px; margin: 8px auto;">
+                                    <div class="confidence-fill" style="width: ${confidence}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="padding: 8px; background: #f8f9fa; border-radius: 5px; font-size: 11px; color: #666; text-align: center;">
+                            ⏰ ${formatDateTime(decision.timestamp)}
+                        </div>
+                    </div>
+                </div>
+            `;
         }
         
         // Fetch Decisions
@@ -840,9 +1138,27 @@
                 
                 if (result.success && result.data) {
                     updateTimeline(result.data);
+                    // Update AI Thinking with latest decision
+                    if (result.data.length > 0) {
+                        updateAIThinking(result.data[0]);
+                    }
                 }
             } catch (error) {
                 console.error('❌ Error fetching decisions:', error);
+            }
+        }
+        
+        // Fetch All Decisions for Confidence Chart (last 30-50 decisions)
+        async function fetchAllDecisionsForChart() {
+            try {
+                const response = await fetch('/api/v1/ai/decisions/?limit=50');
+                const result = await response.json();
+                
+                if (result.success && result.data && result.data.length > 0) {
+                    updateConfidenceChartWithDecisions(result.data);
+                }
+            } catch (error) {
+                console.error('❌ Error fetching all decisions:', error);
             }
         }
         
@@ -916,7 +1232,6 @@
             const labels = stats.daily_breakdown.map(d => d.date);
             const onCounts = stats.daily_breakdown.map(d => d.on_count);
             const offCounts = stats.daily_breakdown.map(d => d.off_count);
-            const avgConfidences = stats.daily_breakdown.map(d => d.avg_confidence * 100);
             
             // Decisions Chart
             if (decisionsChart) {
@@ -964,6 +1279,32 @@
                     }
                 }
             });
+        }
+        
+        // Update Confidence Chart with Individual Decisions
+        function updateConfidenceChartWithDecisions(decisions) {
+            if (!decisions || decisions.length === 0) return;
+            
+            // Reverse to show oldest first (left to right)
+            const reversedDecisions = [...decisions].reverse();
+            
+            // Create labels (show time only)
+            const labels = reversedDecisions.map(d => {
+                const date = new Date(d.timestamp);
+                return date.toLocaleTimeString('th-TH', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+            });
+            
+            // Get confidence values
+            const confidenceValues = reversedDecisions.map(d => (d.confidence * 100).toFixed(1));
+            
+            // Color points based on decision (green for ON, red for OFF)
+            const pointColors = reversedDecisions.map(d => 
+                d.decision === 'on' ? 'rgba(40, 167, 69, 0.8)' : 'rgba(220, 53, 69, 0.8)'
+            );
             
             // Confidence Chart
             if (confidenceChart) {
@@ -976,13 +1317,17 @@
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: 'Average Confidence (%)',
-                        data: avgConfidences,
+                        label: 'Confidence Score (%)',
+                        data: confidenceValues,
                         borderColor: '#ffc107',
                         backgroundColor: 'rgba(255, 193, 7, 0.1)',
                         borderWidth: 3,
                         fill: true,
-                        tension: 0.4
+                        tension: 0.3,
+                        pointBackgroundColor: pointColors,
+                        pointBorderColor: pointColors,
+                        pointRadius: 5,
+                        pointHoverRadius: 7
                     }]
                 },
                 options: {
@@ -991,9 +1336,37 @@
                     plugins: {
                         legend: {
                             position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    const index = context[0].dataIndex;
+                                    const decision = reversedDecisions[index];
+                                    return formatDateTime(decision.timestamp);
+                                },
+                                label: function(context) {
+                                    const index = context.dataIndex;
+                                    const decision = reversedDecisions[index];
+                                    return [
+                                        `Confidence: ${context.parsed.y}%`,
+                                        `Decision: ${decision.decision.toUpperCase()}`,
+                                        `Reasoning: ${decision.reasoning || 'N/A'}`
+                                    ];
+                                }
+                            }
                         }
                     },
                     scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time (Latest ' + decisions.length + ' Decisions)'
+                            },
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        },
                         y: {
                             beginAtZero: true,
                             max: 100,
@@ -1055,7 +1428,8 @@
                     fetchAIStatus(),
                     fetchDecisions(),
                     fetchStatistics(),
-                    fetchRelayStatus()
+                    fetchRelayStatus(),
+                    fetchAllDecisionsForChart()  // เพิ่มการดึงข้อมูลสำหรับ chart
                 ]);
                 
                 showIndicator('✅ Data updated successfully');
