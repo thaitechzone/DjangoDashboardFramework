@@ -610,7 +610,7 @@
     <div class="dashboard-container">
         <!-- Header -->
         <div class="dashboard-header">
-            <h1>🏠 IoT Dashboard - Temperature & Humidity Monitoring</h1>
+            <h1>🏠 IoT Dashboard - Control & Monitoring</h1>
             <div class="update-time">
                 <span id="current-time">{{ current_time|timezone:"Asia/Bangkok"|date:"d/m/Y H:i:s" }}</span>
                 <span style="margin: 0 10px; color: #999;">|</span>
@@ -1867,6 +1867,28 @@ function getCookie(name) {
 }
 </script>
 
+<!-- Footer -->
+<footer style="
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: rgba(255,255,255,0.75);
+    text-align: center;
+    padding: 18px 20px;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    margin-top: 10px;
+">
+    <span>Copyright &copy; 2026 &nbsp;|&nbsp; Author LINE ID :</span>
+    <a href="https://line.me/ti/p/~thaitechzone"
+       target="_blank"
+       rel="noopener noreferrer"
+       style="color: #06c755; font-weight: bold; text-decoration: none; margin-left: 4px;">
+        <img src="https://scdn.line-apps.com/n/line_add_friends/btn/en.png"
+             alt="LINE"
+             style="height: 14px; vertical-align: middle; margin-right: 4px;">
+        ThaiTechZone
+    </a>
+</footer>
 
 </body>
 </html>

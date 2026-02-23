@@ -1,6 +1,6 @@
 """
 Weather Service - OpenWeatherMap API Integration
-Fetches current weather data for Nakhon Si Thammarat
+Fetches current weather and air quality data
 """
 
 import os
@@ -17,6 +17,7 @@ class WeatherService:
         self.api_key = os.getenv('OPENWEATHER_API_KEY')
         self.location = os.getenv('WEATHER_LOCATION', 'Nakhon Si Thammarat,TH')
         self.base_url = 'http://api.openweathermap.org/data/2.5/weather'
+        self.air_pollution_url = 'http://api.openweathermap.org/data/2.5/air_pollution'
         
         if not self.api_key:
             logger.warning("⚠️ OPENWEATHER_API_KEY not found in environment variables")
@@ -54,12 +55,21 @@ class WeatherService:
                 'feels_like': data['main']['feels_like'],
                 'pressure': data['main']['pressure'],
                 'wind_speed': data['wind']['speed'],
+                'wind_deg': data['wind'].get('deg', 0),
                 'clouds': data['clouds']['all'],
-                'location': self.location
+                'location': self.location,
+                'city_name': data.get('name', self.location.split(',')[0]),
+                'lat': data['coord']['lat'],
+                'lon': data['coord']['lon'],
             }
             
             # Calculate rain probability based on conditions
             weather_info['rain_probability'] = self._estimate_rain_probability(data)
+            
+            # Fetch Air Quality (AQI / PM2.5)
+            air_quality = self._get_air_quality(weather_info['lat'], weather_info['lon'])
+            if air_quality:
+                weather_info.update(air_quality)
             
             logger.info(f"✅ Weather fetched: {weather_info['temperature']}°C, {weather_info['description']}")
             return weather_info
@@ -71,6 +81,39 @@ class WeatherService:
             logger.error(f"❌ Error parsing weather data: {e}")
             return None
     
+    def _get_air_quality(self, lat: float, lon: float) -> Optional[Dict]:
+        """
+        Fetch Air Quality Index (AQI) and PM2.5 from OpenWeatherMap Air Pollution API
+
+        Returns:
+            Dict with aqi, aqi_label, pm2_5, pm10 or None if failed
+        """
+        try:
+            params = {
+                'lat': lat,
+                'lon': lon,
+                'appid': self.api_key,
+            }
+            response = requests.get(self.air_pollution_url, params=params, timeout=10)
+            response.raise_for_status()
+            aq_data = response.json()
+
+            aqi_value = aq_data['list'][0]['main']['aqi']  # 1-5
+            components = aq_data['list'][0]['components']
+
+            aqi_labels = {1: 'Good', 2: 'Fair', 3: 'Moderate', 4: 'Poor', 5: 'Very Poor'}
+
+            logger.info(f"✅ Air quality fetched: AQI={aqi_value}, PM2.5={components.get('pm2_5')}")
+            return {
+                'aqi': aqi_value,
+                'aqi_label': aqi_labels.get(aqi_value, 'Unknown'),
+                'pm2_5': components.get('pm2_5', 0),
+                'pm10': components.get('pm10', 0),
+            }
+        except Exception as e:
+            logger.warning(f"⚠️ Could not fetch air quality: {e}")
+            return None
+
     def _estimate_rain_probability(self, data: Dict) -> float:
         """
         Estimate rain probability based on weather conditions

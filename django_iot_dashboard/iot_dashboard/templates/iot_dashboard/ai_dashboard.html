@@ -150,6 +150,34 @@
             padding: 25px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
             margin-bottom: 30px;
+            transition: background 1.2s ease, box-shadow 1.2s ease;
+        }
+
+        /* Weather card color themes */
+        .weather-card.weather-sunny {
+            /* ฟ้าโปร่ง แดดจัด */
+            background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+            box-shadow: 0 10px 30px rgba(255, 200, 0, 0.4);
+        }
+        .weather-card.weather-clear {
+            /* ท้องฟ้าแจ่มใส */
+            background: linear-gradient(135deg, #43c6ac 0%, #1a97d4 100%);
+            box-shadow: 0 10px 30px rgba(30, 180, 230, 0.35);
+        }
+        .weather-card.weather-cloudy {
+            /* มีเมฆบ้าง */
+            background: linear-gradient(135deg, #5f9fd4 0%, #8da5ba 100%);
+            box-shadow: 0 10px 30px rgba(90, 130, 170, 0.35);
+        }
+        .weather-card.weather-likely-rain {
+            /* มีโอกาสฝนตก */
+            background: linear-gradient(135deg, #536976 0%, #292e49 100%);
+            box-shadow: 0 10px 30px rgba(50, 60, 100, 0.45);
+        }
+        .weather-card.weather-rain {
+            /* ฝนตกหนัก / พายุฝน */
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            box-shadow: 0 10px 30px rgba(10, 20, 60, 0.6);
         }
         
         .weather-grid {
@@ -535,7 +563,7 @@
         
         <!-- Weather Information -->
         <div class="weather-card">
-            <h2 style="text-align: center; margin-bottom: 10px;">🌤️ Current Weather - Nakhon Si Thammarat</h2>
+            <h2 id="weather-location-title" style="text-align: center; margin-bottom: 10px;">🌤️ Current Weather</h2>
             <div class="weather-grid" id="weather-grid">
                 <div class="weather-item">
                     <div class="weather-icon">🌡️</div>
@@ -556,6 +584,26 @@
                     <div class="weather-icon">🌧️</div>
                     <div class="weather-value" id="weather-rain">--%</div>
                     <div class="weather-label">Rain Probability</div>
+                </div>
+                <div class="weather-item">
+                    <div class="weather-icon">💨</div>
+                    <div class="weather-value" id="weather-wind">-- km/h</div>
+                    <div class="weather-label" id="weather-wind-dir">Wind</div>
+                </div>
+                <div class="weather-item">
+                    <div class="weather-icon">🔵</div>
+                    <div class="weather-value" id="weather-pressure">-- hPa</div>
+                    <div class="weather-label">Pressure</div>
+                </div>
+                <div class="weather-item">
+                    <div class="weather-icon" id="weather-aqi-icon">🟢</div>
+                    <div class="weather-value" id="weather-aqi">--</div>
+                    <div class="weather-label">AQI</div>
+                </div>
+                <div class="weather-item">
+                    <div class="weather-icon">🫁</div>
+                    <div class="weather-value" id="weather-pm25">-- µg/m³</div>
+                    <div class="weather-label">PM2.5</div>
                 </div>
             </div>
         </div>
@@ -812,9 +860,62 @@
             }
         }
         
+        // Wind degree to cardinal direction
+        function windDirection(deg) {
+            const dirs = ['N','NE','E','SE','S','SW','W','NW'];
+            return dirs[Math.round(deg / 45) % 8];
+        }
+
+        // Update weather card background color based on conditions
+        function updateWeatherCardColor(weather) {
+            const card = document.querySelector('.weather-card');
+            if (!card) return;
+
+            const rain = weather.rain_probability || 0;
+            const desc = (weather.description || '').toLowerCase();
+            const main = (weather.main || '').toLowerCase();
+
+            // Remove all theme classes first
+            card.classList.remove('weather-sunny', 'weather-clear', 'weather-cloudy', 'weather-likely-rain', 'weather-rain');
+
+            if (main.includes('thunderstorm') || desc.includes('storm') || rain >= 80) {
+                // ⛈️ พายุฝนฟ้าคะนอง / ฝนหนักมาก
+                card.classList.add('weather-rain');
+            } else if (rain >= 55 || main.includes('rain') || desc.includes('rain') || desc.includes('drizzle')) {
+                // 🌧️ มีโอกาสฝนตกสูง
+                card.classList.add('weather-likely-rain');
+            } else if (rain >= 30 || main.includes('cloud') || desc.includes('cloud')) {
+                // ⛅ มีเมฆบ้าง
+                card.classList.add('weather-cloudy');
+            } else if (main.includes('clear') || desc.includes('clear') || rain < 15) {
+                // ☀️ ฟ้าโปร่งแจ่มใส / แดดจัด
+                const temp = weather.temperature || 0;
+                card.classList.add(temp >= 32 ? 'weather-sunny' : 'weather-clear');
+            } else {
+                // ค่าเริ่มต้น ท้องฟ้าสดใส
+                card.classList.add('weather-clear');
+            }
+        }
+
+        // AQI level to emoji
+        function aqiIcon(aqi) {
+            const icons = {1: '🟢', 2: '🟡', 3: '🟠', 4: '🔴', 5: '🟣'};
+            return icons[aqi] || '⚪';
+        }
+
         // Update Weather Display
         function updateWeatherDisplay(weather) {
             if (!weather) return;
+
+            // Update card color based on conditions
+            updateWeatherCardColor(weather);
+            
+            // Update location title dynamically
+            const titleEl = document.getElementById('weather-location-title');
+            if (titleEl) {
+                const cityName = weather.city_name || (weather.location ? weather.location.split(',')[0] : null);
+                titleEl.textContent = cityName ? `🌤️ Current Weather - ${cityName}` : '🌤️ Current Weather';
+            }
             
             document.getElementById('weather-temp').textContent = 
                 weather.temperature ? weather.temperature.toFixed(1) + '°C' : '--°C';
@@ -827,7 +928,30 @@
             
             document.getElementById('weather-rain').textContent = 
                 weather.rain_probability ? weather.rain_probability.toFixed(0) + '%' : '--%';
-            
+
+            // Wind
+            const windKmh = weather.wind_speed ? (weather.wind_speed * 3.6).toFixed(1) : '--';
+            document.getElementById('weather-wind').textContent = windKmh + ' km/h';
+            const windDirEl = document.getElementById('weather-wind-dir');
+            if (windDirEl && weather.wind_deg !== undefined) {
+                windDirEl.textContent = 'Wind ' + windDirection(weather.wind_deg);
+            }
+
+            // Pressure
+            document.getElementById('weather-pressure').textContent =
+                weather.pressure ? weather.pressure + ' hPa' : '-- hPa';
+
+            // AQI
+            if (weather.aqi) {
+                document.getElementById('weather-aqi').textContent =
+                    weather.aqi + ' - ' + (weather.aqi_label || '');
+                document.getElementById('weather-aqi-icon').textContent = aqiIcon(weather.aqi);
+            }
+
+            // PM2.5
+            document.getElementById('weather-pm25').textContent =
+                weather.pm2_5 !== undefined ? weather.pm2_5.toFixed(1) + ' µg/m³' : '-- µg/m³';
+
             // Update weather icon
             const iconEl = document.getElementById('weather-icon');
             if (weather.description) {
@@ -1495,5 +1619,29 @@
             console.log('✅ Auto-update enabled: refreshing every 10 seconds');
         });
     </script>
+
+<!-- Footer -->
+<footer style="
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: rgba(255,255,255,0.75);
+    text-align: center;
+    padding: 18px 20px;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    margin-top: 10px;
+">
+    <span>Copyright &copy; 2026 &nbsp;|&nbsp; Author LINE ID :</span>
+    <a href="https://line.me/ti/p/~thaitechzone"
+       target="_blank"
+       rel="noopener noreferrer"
+       style="color: #06c755; font-weight: bold; text-decoration: none; margin-left: 4px;">
+        <img src="https://scdn.line-apps.com/n/line_add_friends/btn/en.png"
+             alt="LINE"
+             style="height: 14px; vertical-align: middle; margin-right: 4px;">
+        ThaiTechZone
+    </a>
+</footer>
+
 </body>
 </html>
