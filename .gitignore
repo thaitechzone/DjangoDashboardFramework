@@ -1,0 +1,3 @@
+*.sqlite3
+django_iot_dashboard/db.sqlite3
+*.sqlite3
