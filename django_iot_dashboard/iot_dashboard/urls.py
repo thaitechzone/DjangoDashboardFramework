@@ -1,25 +1,16 @@
 from django.urls import path
 from . import views
 from . import views_simple
-from .debug_views import debug_view
-from django.shortcuts import render
-
-def test_view(request):
-    return render(request, 'iot_dashboard/test.html')
 
 urlpatterns = [
-    # Simple dashboard (recommended)
+    # Main dashboard
     path('', views_simple.dashboard_simple, name='dashboard_simple'),
     
     # AI Agent Dashboard
     path('ai/', views_simple.ai_dashboard, name='ai_dashboard'),
     
-    # Original complex dashboard (backup)
+    # Original complex dashboard
     path('complex/', views.dashboard_view, name='dashboard'),
-    
-    # Debug and test pages
-    path('debug/', debug_view, name='debug'),
-    path('test/', test_view, name='test'),
     
     # LED Control (Web Form)
     path('control-led/', views_simple.control_led, name='control_led'),
