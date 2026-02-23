@@ -502,7 +502,80 @@
         flex-direction: column;
     }
 }
-    
+
+/* Device Identity Configuration Card */
+.device-config-section {
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    margin-bottom: 30px;
+}
+
+.device-config-section h2 {
+    color: #333;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.device-id-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 18px;
+    letter-spacing: 1px;
+    margin: 10px 0;
+}
+
+.topic-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+    font-size: 13px;
+}
+
+.topic-table th {
+    background: #f0f4ff;
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 2px solid #dee2e6;
+    color: #555;
+    font-weight: bold;
+}
+
+.topic-table td {
+    padding: 7px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+.topic-table tr:hover {
+    background: #f8f9fa;
+}
+
+.topic-dir-pub  { color: #27ae60; font-weight: bold; }
+.topic-dir-sub  { color: #2980b9; font-weight: bold; }
+
+.device-config-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin: 20px 0;
+}
+
+.device-config-inputs .threshold-input-group input {
+    font-family: monospace;
+}
+
+@media (max-width: 768px) {
+    .device-config-inputs {
+        grid-template-columns: 1fr;
+    }
+}
     </style>
 </head>
 <body>
@@ -706,7 +779,7 @@
                 </div>
                 
                 <div style="margin-top: 15px; text-align: center; font-size: 12px; color: #999;">
-                    📡 MQTT Topics: thaitechzone/v2_board/control/relay[1,2,3] | Payload: ON/OFF
+                    📡 MQTT Topics: {{ mqtt_topics.relay1_control }} | Payload: ON/OFF
                 </div>
             </div>
         </div>
@@ -790,6 +863,154 @@
     
     <div style="margin-top: 15px; text-align: center; font-size: 12px; color: #999;">
         💡 AUTO mode: Relay 1 จะเปิดอัตโนมัติเมื่อค่าเกิน Threshold | MANUAL mode: ควบคุมด้วยมือ
+    </div>
+</div>
+
+
+<!-- ========================================
+     Device Identity Configuration Section
+     ======================================== -->
+<div class="device-config-section">
+    <h2>📟 Device Identity Configuration</h2>
+
+    <div style="text-align: center; margin-bottom: 20px;">
+        <div style="font-size: 13px; color: #666; margin-bottom: 8px;">Active Device ID</div>
+        <span class="device-id-badge" id="active-device-badge">{{ device_config.device_name }}</span>
+        <div style="font-size: 12px; color: #999; margin-top: 8px;">
+            MQTT Client ID: <code id="active-client-id">{{ device_config.mqtt_client_id_prefix }}_{{ device_config.device_name }}</code>
+        </div>
+        <div style="font-size: 12px; color: #999;">
+            Broker: <code>{{ device_config.mqtt_broker }}:{{ device_config.mqtt_port }}</code>
+        </div>
+    </div>
+
+    <!-- Edit Inputs -->
+    <div class="device-config-inputs">
+        <div class="threshold-input-group">
+            <label for="input-device-name">🏷️ Device Name (DEVICE_ID)</label>
+            <input type="text" id="input-device-name" value="{{ device_config.device_name }}"
+                   placeholder="เช่น tti_board_001, tti_board_002"
+                   style="font-family: monospace;" />
+            <small style="color: #888; margin-top: 4px; display:block;">
+                ตรงกับ <code>#define DEVICE_NAME</code> ใน firmware
+            </small>
+        </div>
+        <div class="threshold-input-group">
+            <label for="input-client-prefix">🔑 MQTT Client ID Prefix</label>
+            <input type="text" id="input-client-prefix" value="{{ device_config.mqtt_client_id_prefix }}"
+                   placeholder="เช่น ThaiTechZone"
+                   style="font-family: monospace;" />
+            <small style="color: #888; margin-top: 4px; display:block;">
+                Client ID จะเป็น: <span id="preview-client-id">{{ device_config.mqtt_client_id_prefix }}_{{ device_config.device_name }}</span>
+            </small>
+        </div>
+    </div>
+
+    <!-- Quick Board Presets -->
+    <div style="margin: 15px 0; text-align: center;">
+        <span style="font-size: 13px; color: #666; margin-right: 10px;">Quick Presets:</span>
+        <button class="mode-button" onclick="setDevicePreset('tti_board_001')" style="padding: 6px 14px; font-size: 13px; margin: 3px;">Board 1</button>
+        <button class="mode-button" onclick="setDevicePreset('tti_board_002')" style="padding: 6px 14px; font-size: 13px; margin: 3px;">Board 2</button>
+        <button class="mode-button" onclick="setDevicePreset('tti_board_003')" style="padding: 6px 14px; font-size: 13px; margin: 3px;">Board 3</button>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="threshold-actions">
+        <button class="btn btn-success" style="padding: 12px 30px; font-size: 16px;" onclick="saveDeviceConfig()">
+            💾 Save &amp; Apply
+        </button>
+        <button class="btn btn-warning" style="padding: 12px 30px; font-size: 16px;" onclick="loadDeviceConfig()">
+            🔄 Reload
+        </button>
+    </div>
+
+    <!-- Save result message -->
+    <div id="device-config-message" style="text-align:center; margin-top:12px; font-size:14px; display:none;"></div>
+
+    <!-- MQTT Topic Reference Table -->
+    <h3 style="margin: 25px 0 10px; color: #555;">📡 Active MQTT Topics</h3>
+    <table class="topic-table" id="topic-reference-table">
+        <thead>
+            <tr>
+                <th>Feature</th>
+                <th>Topic</th>
+                <th>Direction</th>
+                <th>Payload</th>
+            </tr>
+        </thead>
+        <tbody id="topic-table-body">
+            <tr>
+                <td>LED Control</td>
+                <td id="t-led-ctrl">{{ mqtt_topics.led_control }}</td>
+                <td><span class="topic-dir-sub">▶ SUB</span></td>
+                <td>ON / OFF</td>
+            </tr>
+            <tr>
+                <td>LED State</td>
+                <td id="t-led-state">{{ mqtt_topics.led_state }}</td>
+                <td><span class="topic-dir-pub">◀ PUB</span></td>
+                <td>ON / OFF</td>
+            </tr>
+            <tr>
+                <td>Relay 1 Control</td>
+                <td id="t-r1-ctrl">{{ mqtt_topics.relay1_control }}</td>
+                <td><span class="topic-dir-sub">▶ SUB</span></td>
+                <td>ON / OFF</td>
+            </tr>
+            <tr>
+                <td>Relay 2 Control</td>
+                <td id="t-r2-ctrl">{{ mqtt_topics.relay2_control }}</td>
+                <td><span class="topic-dir-sub">▶ SUB</span></td>
+                <td>ON / OFF</td>
+            </tr>
+            <tr>
+                <td>Relay 3 Control</td>
+                <td id="t-r3-ctrl">{{ mqtt_topics.relay3_control }}</td>
+                <td><span class="topic-dir-sub">▶ SUB</span></td>
+                <td>ON / OFF</td>
+            </tr>
+            <tr>
+                <td>Relay 1 State</td>
+                <td id="t-r1-state">{{ mqtt_topics.relay1_state }}</td>
+                <td><span class="topic-dir-pub">◀ PUB</span></td>
+                <td>ON / OFF</td>
+            </tr>
+            <tr>
+                <td>Relay 2 State</td>
+                <td id="t-r2-state">{{ mqtt_topics.relay2_state }}</td>
+                <td><span class="topic-dir-pub">◀ PUB</span></td>
+                <td>ON / OFF</td>
+            </tr>
+            <tr>
+                <td>Relay 3 State</td>
+                <td id="t-r3-state">{{ mqtt_topics.relay3_state }}</td>
+                <td><span class="topic-dir-pub">◀ PUB</span></td>
+                <td>ON / OFF</td>
+            </tr>
+            <tr>
+                <td>Sensor Data (JSON)</td>
+                <td id="t-sensor">{{ mqtt_topics.sensor_data }}</td>
+                <td><span class="topic-dir-pub">◀ PUB</span></td>
+                <td>{"temperature":27.5,"humidity":65.3}</td>
+            </tr>
+            <tr>
+                <td>Temperature</td>
+                <td id="t-temp">{{ mqtt_topics.temperature }}</td>
+                <td><span class="topic-dir-pub">◀ PUB</span></td>
+                <td>"27.5" (string, °C)</td>
+            </tr>
+            <tr>
+                <td>Humidity</td>
+                <td id="t-hum">{{ mqtt_topics.humidity }}</td>
+                <td><span class="topic-dir-pub">◀ PUB</span></td>
+                <td>"65.3" (string, %)</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div style="margin-top: 12px; text-align: center; font-size: 12px; color: #999;">
+        💡 Topic pattern: <code>thaitechzone/v2/&lt;DEVICE_ID&gt;/&lt;direction&gt;/&lt;property&gt;</code>
+        &nbsp;|&nbsp; ▶ SUB = ESP32 รับ (Dashboard ส่ง) &nbsp;|&nbsp; ◀ PUB = ESP32 ส่ง (Dashboard รับ)
     </div>
 </div>
 
@@ -1384,7 +1605,126 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Reload threshold settings every 10 seconds
     setInterval(loadThresholdSettings, 10000);
+
+    // Load device config on page load
+    loadDeviceConfig();
+
+    // Live preview of client ID as user types
+    document.getElementById('input-device-name').addEventListener('input', updateClientIdPreview);
+    document.getElementById('input-client-prefix').addEventListener('input', updateClientIdPreview);
 });
+
+// ─── Device Identity Functions ────────────────────────────────────────────────
+
+function updateClientIdPreview() {
+    const name = document.getElementById('input-device-name').value.trim() || '...';
+    const prefix = document.getElementById('input-client-prefix').value.trim() || '...';
+    document.getElementById('preview-client-id').textContent = `${prefix}_${name}`;
+}
+
+function setDevicePreset(deviceName) {
+    document.getElementById('input-device-name').value = deviceName;
+    updateClientIdPreview();
+}
+
+async function loadDeviceConfig() {
+    try {
+        const res = await fetch('/api/v1/device-config/');
+        const result = await res.json();
+        if (result.success) {
+            const d = result.data;
+            document.getElementById('input-device-name').value = d.device_name;
+            document.getElementById('input-client-prefix').value = d.mqtt_client_id_prefix;
+            document.getElementById('active-device-badge').textContent = d.device_name;
+            document.getElementById('active-client-id').textContent = d.mqtt_client_id;
+            updateClientIdPreview();
+            updateTopicTable(d.topics);
+        }
+    } catch (err) {
+        console.error('❌ Error loading device config:', err);
+    }
+}
+
+async function saveDeviceConfig() {
+    const deviceName = document.getElementById('input-device-name').value.trim();
+    const prefix = document.getElementById('input-client-prefix').value.trim();
+    const msgEl = document.getElementById('device-config-message');
+
+    if (!deviceName) {
+        showDeviceMsg('⚠️ Please enter a Device Name', 'orange');
+        return;
+    }
+
+    if (!/^[a-zA-Z0-9_\-]+$/.test(deviceName)) {
+        showDeviceMsg('❌ Device Name ต้องใช้ตัวอักษร ตัวเลข _ หรือ - เท่านั้น', 'red');
+        return;
+    }
+
+    try {
+        showDeviceMsg('⏳ Saving...', '#333');
+        const res = await fetch('/api/v1/device-config/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+            body: JSON.stringify({ device_name: deviceName, mqtt_client_id_prefix: prefix })
+        });
+        const result = await res.json();
+        if (result.success) {
+            const d = result.data;
+            document.getElementById('active-device-badge').textContent = d.device_name;
+            document.getElementById('active-client-id').textContent = d.mqtt_client_id;
+            updateTopicTable(d.topics);
+            showDeviceMsg(`✅ Saved! Topics updated → ${d.device_name}`, 'green');
+        } else {
+            showDeviceMsg(`❌ ${result.error}`, 'red');
+        }
+    } catch (err) {
+        console.error('❌ Save device config error:', err);
+        showDeviceMsg('❌ Network error', 'red');
+    }
+}
+
+function showDeviceMsg(text, color) {
+    const el = document.getElementById('device-config-message');
+    el.textContent = text;
+    el.style.color = color;
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+function updateTopicTable(topics) {
+    const map = {
+        'led_control':    't-led-ctrl',
+        'led_state':      't-led-state',
+        'relay1_control': 't-r1-ctrl',
+        'relay2_control': 't-r2-ctrl',
+        'relay3_control': 't-r3-ctrl',
+        'relay1_state':   't-r1-state',
+        'relay2_state':   't-r2-state',
+        'relay3_state':   't-r3-state',
+        'sensor_data':    't-sensor',
+        'temperature':    't-temp',
+        'humidity':       't-hum',
+    };
+    for (const [key, elId] of Object.entries(map)) {
+        const el = document.getElementById(elId);
+        if (el && topics[key]) el.textContent = topics[key];
+    }
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
 </script>
 
 

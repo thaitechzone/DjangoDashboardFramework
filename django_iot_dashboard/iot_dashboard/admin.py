@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Device, SensorData, Relay
+from .models import Device, SensorData, Relay, DeviceConfig
 
 # Register your models here.
 
@@ -38,3 +38,13 @@ class SensorDataAdmin(admin.ModelAdmin):
     readonly_fields = ('timestamp',)
     date_hierarchy = 'timestamp'
     ordering = ('-timestamp',)
+
+
+@admin.register(DeviceConfig)
+class DeviceConfigAdmin(admin.ModelAdmin):
+    list_display = ('device_name', 'mqtt_broker', 'mqtt_port', 'mqtt_client_id_preview', 'updated_at')
+    readonly_fields = ('updated_at',)
+
+    def mqtt_client_id_preview(self, obj):
+        return f"{obj.mqtt_client_id_prefix}_{obj.device_name}"
+    mqtt_client_id_preview.short_description = 'MQTT Client ID'

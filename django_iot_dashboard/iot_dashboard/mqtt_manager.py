@@ -39,27 +39,9 @@ class MQTTManager:
     def __init__(self):
         if hasattr(self, 'initialized'):
             return
-        
-        # การตั้งค่า MQTT
-        self.MQTT_BROKER = "broker.hivemq.com"
-        self.MQTT_PORT = 1883
-        
-        # LED Topics
-        self.LED_CONTROL_TOPIC = "thaitechzone/v2_board1/control/led"
-        self.LED_STATUS_TOPIC = "thaitechzone/v2_board1/status/led"
 
-        # RELAY Control Topics (Dashboard → ESP32)
-        self.RELAY1_CONTROL_TOPIC = "thaitechzone/v2_board1/control/relay1"
-        self.RELAY2_CONTROL_TOPIC = "thaitechzone/v2_board1/control/relay2"
-        self.RELAY3_CONTROL_TOPIC = "thaitechzone/v2_board1/control/relay3"
-
-        # RELAY State Topics (ESP32 → Dashboard)
-        self.RELAY1_STATE_TOPIC = "thaitechzone/v2_board1/state/relay1"
-        self.RELAY2_STATE_TOPIC = "thaitechzone/v2_board1/state/relay2"
-        self.RELAY3_STATE_TOPIC = "thaitechzone/v2_board1/state/relay3"
-
-        # Sensor Data Topic
-        self.SENSOR_DATA_TOPIC = "thaitechzone/v2_board1/sensor/data"
+        # โหลด topics จาก DeviceConfig (ถ้ายังไม่พร้อมใช้ default)
+        self._load_topics_from_config()
 
         # สถานะการเชื่อมต่อ
         self.is_connected = False
@@ -90,6 +72,105 @@ class MQTTManager:
         self._start_connection_thread()
         self._start_message_processor()
     
+    def _load_topics_from_config(self, device_name=None):
+        """
+        โหลด MQTT topics จาก DeviceConfig database
+        ถ้ายังเข้าถึง DB ไม่ได้ ใช้ค่า default (tti_board_001)
+        ตาม pattern: thaitechzone/v2/<DEVICE_ID>/<direction>/<property>
+        """
+        if device_name is None:
+            try:
+                from .models import DeviceConfig
+                config = DeviceConfig.get_config()
+                device_name = config.device_name
+                self.MQTT_BROKER = config.mqtt_broker
+                self.MQTT_PORT = config.mqtt_port
+                logger.info(f"📋 Loaded DeviceConfig: device_name={device_name}")
+            except Exception as e:
+                logger.warning(f"⚠️ Cannot load DeviceConfig (using default): {e}")
+                device_name = "tti_board_001"
+                self.MQTT_BROKER = "broker.hivemq.com"
+                self.MQTT_PORT = 1883
+
+        self._current_device_name = device_name
+        base = f"thaitechzone/v2/{device_name}"
+
+        # LED Topics
+        self.LED_CONTROL_TOPIC = f"{base}/control/led"
+        self.LED_STATUS_TOPIC = f"{base}/state/led"   # state/led ตาม markdown
+
+        # RELAY Control Topics (Dashboard → ESP32)
+        self.RELAY1_CONTROL_TOPIC = f"{base}/control/relay1"
+        self.RELAY2_CONTROL_TOPIC = f"{base}/control/relay2"
+        self.RELAY3_CONTROL_TOPIC = f"{base}/control/relay3"
+
+        # RELAY State Topics (ESP32 → Dashboard)
+        self.RELAY1_STATE_TOPIC = f"{base}/state/relay1"
+        self.RELAY2_STATE_TOPIC = f"{base}/state/relay2"
+        self.RELAY3_STATE_TOPIC = f"{base}/state/relay3"
+
+        # Sensor Data Topic
+        self.SENSOR_DATA_TOPIC = f"{base}/sensor/data"
+
+        # Individual Sensor Topics
+        self.SENSOR_TEMP_TOPIC = f"{base}/sensor/temperature"
+        self.SENSOR_HUMIDITY_TOPIC = f"{base}/sensor/humidity"
+
+        logger.info(f"📡 MQTT Topics loaded for device '{device_name}': base={base}")
+
+    def reload_topics(self, new_device_name=None):
+        """
+        โหลด topics ใหม่จาก DeviceConfig (เรียกหลังจาก user เปลี่ยน device_name)
+        Unsubscribe จาก topics เก่า → อัปเดต topics → Subscribe topics ใหม่
+        Re-register callbacks ใหม่ด้วย
+
+        Args:
+            new_device_name (str, optional): ถ้าระบุจะใช้ค่านี้แทนการโหลดจาก DB
+        """
+        logger.info("🔄 Reloading MQTT topics from DeviceConfig...")
+
+        # เก็บ topics เก่าไว้ก่อน unsubscribe
+        old_topics = [
+            self.LED_STATUS_TOPIC,
+            self.SENSOR_DATA_TOPIC,
+            self.RELAY1_STATE_TOPIC,
+            self.RELAY2_STATE_TOPIC,
+            self.RELAY3_STATE_TOPIC,
+        ]
+
+        # โหลด topics ใหม่
+        self._load_topics_from_config(device_name=new_device_name)
+
+        if self.is_connected:
+            # Unsubscribe จาก topics เก่า
+            for topic in old_topics:
+                try:
+                    self.client.unsubscribe(topic)
+                    logger.info(f"📤 Unsubscribed from old topic: {topic}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not unsubscribe from {topic}: {e}")
+
+            # Subscribe ใหม่
+            self._subscribe_to_topics()
+
+            # Re-register message callbacks
+            self._reregister_callbacks()
+
+        logger.info(f"✅ Topics reloaded for device: {self._current_device_name}")
+
+    def _reregister_callbacks(self):
+        """Re-register callbacks หลังจาก topics เปลี่ยน"""
+        try:
+            # Clear callbacks เก่า
+            self.message_callbacks = {}
+
+            # Register ใหม่
+            from .mqtt_callbacks import register_mqtt_callbacks
+            register_mqtt_callbacks(self)
+            logger.info("✅ MQTT callbacks re-registered")
+        except Exception as e:
+            logger.error(f"❌ Error re-registering callbacks: {e}")
+
     def _setup_client(self):
         """ตั้งค่า MQTT Client"""
         self.client = mqtt.Client(client_id=self.client_id)
@@ -163,16 +244,18 @@ class MQTTManager:
         logger.debug(f"📤 Message published successfully (ID: {mid})")
     
     def _subscribe_to_topics(self):
-        """Subscribe to MQTT topics"""
+        """Subscribe to MQTT topics ตาม device_name ที่ตั้งค่าไว้"""
         topics = [
-            (self.LED_STATUS_TOPIC, 1),
-            (self.SENSOR_DATA_TOPIC, 1),
+            (self.LED_STATUS_TOPIC, 1),          # state/led
+            (self.SENSOR_DATA_TOPIC, 1),          # sensor/data
+            (self.SENSOR_TEMP_TOPIC, 1),          # sensor/temperature
+            (self.SENSOR_HUMIDITY_TOPIC, 1),      # sensor/humidity
             # Subscribe to RELAY state topics (รับสถานะจาก ESP32)
             (self.RELAY1_STATE_TOPIC, 1),
             (self.RELAY2_STATE_TOPIC, 1),
-            (self.RELAY3_STATE_TOPIC, 1)
+            (self.RELAY3_STATE_TOPIC, 1),
         ]
-        
+
         for topic, qos in topics:
             result = self.client.subscribe(topic, qos)
             logger.info(f"📥 Subscribed to topic: {topic} (QoS: {qos})")
@@ -401,7 +484,7 @@ class MQTTManager:
     def get_status(self):
         """
         ได้รับสถานะของ MQTT Manager
-        
+
         Returns:
             dict: ข้อมูลสถานะ
         """
@@ -411,16 +494,19 @@ class MQTTManager:
             'client_id': self.client_id,
             'broker': f"{self.MQTT_BROKER}:{self.MQTT_PORT}",
             'pending_messages': self.pending_messages.qsize(),
+            'device_name': getattr(self, '_current_device_name', 'tti_board_001'),
             'topics': {
                 'led_control': self.LED_CONTROL_TOPIC,
-                'led_status': self.LED_STATUS_TOPIC,
+                'led_state': self.LED_STATUS_TOPIC,
                 'relay1_control': self.RELAY1_CONTROL_TOPIC,
                 'relay2_control': self.RELAY2_CONTROL_TOPIC,
                 'relay3_control': self.RELAY3_CONTROL_TOPIC,
                 'relay1_state': self.RELAY1_STATE_TOPIC,
                 'relay2_state': self.RELAY2_STATE_TOPIC,
                 'relay3_state': self.RELAY3_STATE_TOPIC,
-                'sensor_data': self.SENSOR_DATA_TOPIC
+                'sensor_data': self.SENSOR_DATA_TOPIC,
+                'sensor_temperature': self.SENSOR_TEMP_TOPIC,
+                'sensor_humidity': self.SENSOR_HUMIDITY_TOPIC,
             }
         }
     
@@ -490,4 +576,24 @@ def send_relay_command(relay_num, command):
             
     except Exception as e:
         logger.error(f"❌ Error in send_relay_command: {e}")
+        return False, f"Error: {e}"
+
+
+def reload_mqtt_topics(new_device_name=None):
+    """
+    โหลด MQTT topics ใหม่ (เรียกหลังจาก user เปลี่ยน DeviceConfig)
+
+    Args:
+        new_device_name (str, optional): device name ใหม่
+
+    Returns:
+        tuple: (success, message)
+    """
+    try:
+        manager = get_mqtt_manager()
+        manager.reload_topics(new_device_name=new_device_name)
+        device = getattr(manager, '_current_device_name', 'unknown')
+        return True, f"Topics reloaded for device: {device}"
+    except Exception as e:
+        logger.error(f"❌ Error reloading MQTT topics: {e}")
         return False, f"Error: {e}"

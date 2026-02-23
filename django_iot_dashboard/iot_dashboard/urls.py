@@ -54,4 +54,7 @@ urlpatterns = [
     path('api/v1/ai/decisions/', views_simple.api_ai_decisions, name='api_v1_ai_decisions'),
     path('api/v1/ai/analyze-now/', views_simple.api_ai_analyze_now, name='api_v1_ai_analyze_now'),
     path('api/v1/ai/stats/', views_simple.api_ai_stats, name='api_v1_ai_stats'),
+
+    # Device Identity / Config API
+    path('api/v1/device-config/', views_simple.api_device_config, name='api_v1_device_config'),
 ]

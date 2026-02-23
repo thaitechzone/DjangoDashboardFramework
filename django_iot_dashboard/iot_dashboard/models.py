@@ -348,6 +348,103 @@ class ThresholdSetting(models.Model):
         return obj
 
 
+class DeviceConfig(models.Model):
+    """
+    Model สำหรับเก็บค่า Device Identity
+    ใช้ Singleton pattern (id=1 เสมอ)
+    ผู้ใช้สามารถเปลี่ยน device_name เพื่อป้องกัน MQTT Topic ซ้ำกัน
+    """
+    device_name = models.CharField(
+        max_length=50,
+        default="tti_board_001",
+        verbose_name="Device Name (DEVICE_ID)",
+        help_text="ชื่อบอร์ดที่ตั้งใน #define DEVICE_NAME ของ firmware เช่น tti_board_001"
+    )
+    mqtt_broker = models.CharField(
+        max_length=100,
+        default="broker.hivemq.com",
+        verbose_name="MQTT Broker"
+    )
+    mqtt_port = models.IntegerField(
+        default=1883,
+        verbose_name="MQTT Port"
+    )
+    mqtt_client_id_prefix = models.CharField(
+        max_length=50,
+        default="ThaiTechZone",
+        verbose_name="MQTT Client ID Prefix",
+        help_text="Prefix สำหรับ MQTT Client ID เช่น ThaiTechZone → ThaiTechZone_tti_board_001"
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Device Configuration"
+        verbose_name_plural = "Device Configurations"
+
+    def __str__(self):
+        return f"Device: {self.device_name} @ {self.mqtt_broker}:{self.mqtt_port}"
+
+    @classmethod
+    def get_config(cls):
+        """ดึง config (Singleton id=1)"""
+        obj, _ = cls.objects.get_or_create(
+            id=1,
+            defaults={
+                'device_name': 'tti_board_001',
+                'mqtt_broker': 'broker.hivemq.com',
+                'mqtt_port': 1883,
+                'mqtt_client_id_prefix': 'ThaiTechZone',
+            }
+        )
+        return obj
+
+    def get_base_topic(self):
+        return f"thaitechzone/v2/{self.device_name}"
+
+    # ─── Topic helpers (ตรงตาม mqtt_topic_id.md) ────────────────────────────
+
+    def led_control_topic(self):
+        return f"{self.get_base_topic()}/control/led"
+
+    def led_state_topic(self):
+        return f"{self.get_base_topic()}/state/led"
+
+    def relay_control_topic(self, relay_num):
+        return f"{self.get_base_topic()}/control/relay{relay_num}"
+
+    def relay_state_topic(self, relay_num):
+        return f"{self.get_base_topic()}/state/relay{relay_num}"
+
+    def sensor_data_topic(self):
+        return f"{self.get_base_topic()}/sensor/data"
+
+    def temperature_topic(self):
+        return f"{self.get_base_topic()}/sensor/temperature"
+
+    def humidity_topic(self):
+        return f"{self.get_base_topic()}/sensor/humidity"
+
+    def isolate_in_topic(self, port_num):
+        return f"{self.get_base_topic()}/state/isolate_in{port_num}"
+
+    def get_all_topics_display(self):
+        """คืน dict ของ topics ทั้งหมดเพื่อแสดงใน UI"""
+        return {
+            'base': self.get_base_topic(),
+            'led_control': self.led_control_topic(),
+            'led_state': self.led_state_topic(),
+            'relay1_control': self.relay_control_topic(1),
+            'relay2_control': self.relay_control_topic(2),
+            'relay3_control': self.relay_control_topic(3),
+            'relay1_state': self.relay_state_topic(1),
+            'relay2_state': self.relay_state_topic(2),
+            'relay3_state': self.relay_state_topic(3),
+            'sensor_data': self.sensor_data_topic(),
+            'temperature': self.temperature_topic(),
+            'humidity': self.humidity_topic(),
+        }
+
+
 class AIDecisionLog(models.Model):
     """
     Model สำหรับบันทึกการตัดสินใจของ AI Agent

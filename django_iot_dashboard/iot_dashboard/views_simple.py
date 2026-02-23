@@ -6,8 +6,8 @@ from django.utils import timezone
 import json
 import logging
 import pytz
-from .models import Device, SensorData, Relay, ThresholdSetting
-from .mqtt_manager import get_mqtt_manager, send_led_command, send_relay_command
+from .models import Device, SensorData, Relay, ThresholdSetting, DeviceConfig
+from .mqtt_manager import get_mqtt_manager, send_led_command, send_relay_command, reload_mqtt_topics
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -50,6 +50,9 @@ def dashboard_simple(request):
     
     # Get recent 20 sensor data for charts
     recent_sensors = SensorData.objects.order_by('-timestamp')[:20]
+
+    # Get Device Config
+    device_config = DeviceConfig.get_config()
     
     context = {
         'led': led_device,
@@ -58,6 +61,8 @@ def dashboard_simple(request):
         'recent_sensors': recent_sensors,
         'current_time': timezone.now(),
         'total_readings': SensorData.objects.count(),
+        'device_config': device_config,
+        'mqtt_topics': device_config.get_all_topics_display(),
     }
     
     return render(request, 'iot_dashboard/dashboard_simple.html', context)
@@ -1481,3 +1486,94 @@ def api_ai_stats(request):
             'success': False,
             'error': str(e)
         }, status=500)
+
+
+# =============================================================================
+# Device Identity / Config API
+# =============================================================================
+
+@csrf_exempt
+def api_device_config(request):
+    """
+    GET  → ดึงค่า DeviceConfig ปัจจุบัน + topics ทั้งหมด
+    POST → อัปเดต device_name (และ reload MQTT topics ทันที)
+    """
+    try:
+        config = DeviceConfig.get_config()
+
+        if request.method == 'GET':
+            manager = get_mqtt_manager()
+            mqtt_status = manager.get_status()
+            return JsonResponse({
+                'success': True,
+                'data': {
+                    'device_name': config.device_name,
+                    'mqtt_broker': config.mqtt_broker,
+                    'mqtt_port': config.mqtt_port,
+                    'mqtt_client_id_prefix': config.mqtt_client_id_prefix,
+                    'mqtt_client_id': f"{config.mqtt_client_id_prefix}_{config.device_name}",
+                    'updated_at': config.updated_at.strftime('%Y-%m-%d %H:%M:%S') if config.updated_at else None,
+                    'topics': config.get_all_topics_display(),
+                    'mqtt_connected': mqtt_status.get('connected', False),
+                }
+            })
+
+        elif request.method == 'POST':
+            try:
+                body = json.loads(request.body)
+            except (json.JSONDecodeError, TypeError):
+                body = request.POST.dict()
+
+            new_device_name = body.get('device_name', '').strip()
+            new_broker = body.get('mqtt_broker', '').strip()
+            new_port = body.get('mqtt_port', None)
+            new_prefix = body.get('mqtt_client_id_prefix', '').strip()
+
+            # Validate device_name
+            if not new_device_name:
+                return JsonResponse({'success': False, 'error': 'device_name is required'}, status=400)
+
+            import re
+            if not re.match(r'^[a-zA-Z0-9_\-]+$', new_device_name):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'device_name ต้องประกอบด้วยตัวอักษร ตัวเลข _ หรือ - เท่านั้น'
+                }, status=400)
+
+            # อัปเดต
+            config.device_name = new_device_name
+            if new_broker:
+                config.mqtt_broker = new_broker
+            if new_port:
+                try:
+                    config.mqtt_port = int(new_port)
+                except ValueError:
+                    return JsonResponse({'success': False, 'error': 'mqtt_port must be integer'}, status=400)
+            if new_prefix:
+                config.mqtt_client_id_prefix = new_prefix
+            config.save()
+
+            # Reload MQTT topics ทันที
+            success, msg = reload_mqtt_topics(new_device_name=new_device_name)
+
+            logger.info(f"✅ DeviceConfig updated: device_name={new_device_name}, reload={success}")
+
+            return JsonResponse({
+                'success': True,
+                'message': f"Device config updated. {msg}",
+                'data': {
+                    'device_name': config.device_name,
+                    'mqtt_broker': config.mqtt_broker,
+                    'mqtt_port': config.mqtt_port,
+                    'mqtt_client_id': f"{config.mqtt_client_id_prefix}_{config.device_name}",
+                    'topics': config.get_all_topics_display(),
+                    'mqtt_reloaded': success,
+                }
+            })
+
+        else:
+            return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+    except Exception as e:
+        logger.error(f"❌ DeviceConfig API Error: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
