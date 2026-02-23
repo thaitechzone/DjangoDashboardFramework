@@ -115,6 +115,7 @@ class MQTTManager:
         # Individual Sensor Topics
         self.SENSOR_TEMP_TOPIC = f"{base}/sensor/temperature"
         self.SENSOR_HUMIDITY_TOPIC = f"{base}/sensor/humidity"
+        self.SENSOR_DS18B20_TOPIC = f"{base}/sensor/ds18b20"
 
         logger.info(f"📡 MQTT Topics loaded for device '{device_name}': base={base}")
 
@@ -250,6 +251,7 @@ class MQTTManager:
             (self.SENSOR_DATA_TOPIC, 1),          # sensor/data
             (self.SENSOR_TEMP_TOPIC, 1),          # sensor/temperature
             (self.SENSOR_HUMIDITY_TOPIC, 1),      # sensor/humidity
+            (self.SENSOR_DS18B20_TOPIC, 1),       # sensor/ds18b20
             # Subscribe to RELAY state topics (รับสถานะจาก ESP32)
             (self.RELAY1_STATE_TOPIC, 1),
             (self.RELAY2_STATE_TOPIC, 1),
@@ -507,6 +509,7 @@ class MQTTManager:
                 'sensor_data': self.SENSOR_DATA_TOPIC,
                 'sensor_temperature': self.SENSOR_TEMP_TOPIC,
                 'sensor_humidity': self.SENSOR_HUMIDITY_TOPIC,
+                'sensor_ds18b20': self.SENSOR_DS18B20_TOPIC,
             }
         }
     

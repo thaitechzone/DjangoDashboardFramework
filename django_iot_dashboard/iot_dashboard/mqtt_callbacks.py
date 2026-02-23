@@ -177,6 +177,32 @@ def handle_led_status_message(topic, message):
     except Exception as e:
         logger.error(f"❌ Error handling LED status message: {e}")
 
+def handle_ds18b20_message(topic, message):
+    """
+    จัดการข้อความ DS18B20 temperature ที่ได้รับจาก ESP32
+    บันทึกค่าล่าสุดลง DeviceConfig
+
+    Args:
+        topic (str): MQTT topic  e.g. 'thaitechzone/v2/ttz_board_001/sensor/ds18b20'
+        message (str): ค่าอุณหภูมิ string เช่น "27.5"
+    """
+    try:
+        temp_value = float(message.strip())
+
+        from .models import DeviceConfig
+        config = DeviceConfig.get_config()
+        config.ds18b20_temperature = temp_value
+        config.ds18b20_updated_at = timezone.now()
+        config.save(update_fields=['ds18b20_temperature', 'ds18b20_updated_at'])
+
+        logger.info(f"🌡️ DS18B20 temperature received: {temp_value}°C → saved to DeviceConfig")
+
+    except (ValueError, TypeError) as e:
+        logger.warning(f"⚠️ Invalid DS18B20 payload '{message}': {e}")
+    except Exception as e:
+        logger.error(f"❌ Error handling DS18B20 message: {e}")
+
+
 def register_mqtt_callbacks(mqtt_manager):
     """
     ลงทะเบียน callbacks ทั้งหมดกับ MQTT Manager
@@ -204,7 +230,13 @@ def register_mqtt_callbacks(mqtt_manager):
             mqtt_manager.SENSOR_DATA_TOPIC,
             handle_sensor_data_message
         )
-        
+
+        # Register DS18B20 callback
+        mqtt_manager.register_message_callback(
+            mqtt_manager.SENSOR_DS18B20_TOPIC,
+            handle_ds18b20_message
+        )
+
         # Register LED status callback
         mqtt_manager.register_message_callback(
             mqtt_manager.LED_STATUS_TOPIC,

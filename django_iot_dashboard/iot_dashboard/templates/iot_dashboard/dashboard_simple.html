@@ -486,12 +486,21 @@
     color: #4ecdc4;
 }
 
-.threshold-actions {
-    display: flex;
-    gap: 15px;
-    justify-content: center;
-    margin-top: 20px;
-}
+        .average-value.ds18b20 {
+            color: #e67e22;
+        }
+
+        .ds18b20-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #f39c12, #e67e22);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
 
 @media (max-width: 768px) {
     .threshold-config-grid {
@@ -644,6 +653,20 @@
                     </span>
                 </div>
             </div>
+
+            <!-- DS18B20 Temperature Card -->
+            <div class="card">
+                <h2>🌡️ DS18B20 <span class="ds18b20-badge">Real Sensor</span></h2>
+                <div class="sensor-value" style="color: #e67e22;" id="ds18b20-value">
+                    --°C
+                </div>
+                <div class="sensor-info">
+                    Last updated: <span id="ds18b20-time">--:--:--</span>
+                </div>
+                <div style="margin-top: 10px; font-size: 11px; color: #aaa; text-align: center;">
+                    Topic: <code id="ds18b20-topic">{{ mqtt_topics.ds18b20 }}</code>
+                </div>
+            </div>
             
             <!-- LED Control Card -->
             <div class="card led-control">
@@ -658,14 +681,14 @@
                 <div class="control-buttons">
                     <form method="post" action="{% url 'control_led' %}" style="flex: 1;">
                         {% csrf_token %}
-                        <button type="submit" name="action" value="on" class="btn btn-success" style="width: 100%;">
-                            🟢 Turn ON
+                        <button type="submit" name="action" value="on" class="btn btn-success" style="width: 100%; padding: 8px 10px; font-size: 13px;">
+                            🟢 ON
                         </button>
                     </form>
                     <form method="post" action="{% url 'control_led' %}" style="flex: 1;">
                         {% csrf_token %}
-                        <button type="submit" name="action" value="off" class="btn btn-danger" style="width: 100%;">
-                            ⚫ Turn OFF
+                        <button type="submit" name="action" value="off" class="btn btn-danger" style="width: 100%; padding: 8px 10px; font-size: 13px;">
+                            ⚫ OFF
                         </button>
                     </form>
                 </div>
@@ -904,14 +927,6 @@
                 Client ID จะเป็น: <span id="preview-client-id">{{ device_config.mqtt_client_id_prefix }}_{{ device_config.device_name }}</span>
             </small>
         </div>
-    </div>
-
-    <!-- Quick Board Presets -->
-    <div style="margin: 15px 0; text-align: center;">
-        <span style="font-size: 13px; color: #666; margin-right: 10px;">Quick Presets:</span>
-        <button class="mode-button" onclick="setDevicePreset('tti_board_001')" style="padding: 6px 14px; font-size: 13px; margin: 3px;">Board 1</button>
-        <button class="mode-button" onclick="setDevicePreset('tti_board_002')" style="padding: 6px 14px; font-size: 13px; margin: 3px;">Board 2</button>
-        <button class="mode-button" onclick="setDevicePreset('tti_board_003')" style="padding: 6px 14px; font-size: 13px; margin: 3px;">Board 3</button>
     </div>
 
     <!-- Action Buttons -->
@@ -1609,6 +1624,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load device config on page load
     loadDeviceConfig();
 
+    // Load DS18B20 on page load + poll every 5s
+    loadDS18B20();
+    setInterval(loadDS18B20, 5000);
+
     // Live preview of client ID as user types
     document.getElementById('input-device-name').addEventListener('input', updateClientIdPreview);
     document.getElementById('input-client-prefix').addEventListener('input', updateClientIdPreview);
@@ -1620,11 +1639,6 @@ function updateClientIdPreview() {
     const name = document.getElementById('input-device-name').value.trim() || '...';
     const prefix = document.getElementById('input-client-prefix').value.trim() || '...';
     document.getElementById('preview-client-id').textContent = `${prefix}_${name}`;
-}
-
-function setDevicePreset(deviceName) {
-    document.getElementById('input-device-name').value = deviceName;
-    updateClientIdPreview();
 }
 
 async function loadDeviceConfig() {
@@ -1704,10 +1718,45 @@ function updateTopicTable(topics) {
         'sensor_data':    't-sensor',
         'temperature':    't-temp',
         'humidity':       't-hum',
+        'ds18b20':        't-ds18b20',
     };
     for (const [key, elId] of Object.entries(map)) {
         const el = document.getElementById(elId);
         if (el && topics[key]) el.textContent = topics[key];
+    }
+    // Also update topic shown in DS18B20 card
+    if (topics.ds18b20) {
+        const cardTopic = document.getElementById('ds18b20-topic');
+        if (cardTopic) cardTopic.textContent = topics.ds18b20;
+    }
+}
+
+// ─── DS18B20 Functions ───────────────────────────────────────────────────────
+
+async function loadDS18B20() {
+    try {
+        const res = await fetch('/api/v1/sensors/ds18b20/');
+        const result = await res.json();
+        if (result.success) {
+            const d = result.data;
+            const valEl  = document.getElementById('ds18b20-value');
+            const timeEl = document.getElementById('ds18b20-time');
+            if (valEl) {
+                valEl.textContent = d.temperature !== null
+                    ? parseFloat(d.temperature).toFixed(1) + '°C'
+                    : '--°C';
+            }
+            if (timeEl) {
+                if (d.updated_at) {
+                    // show only HH:MM:SS part
+                    timeEl.textContent = d.updated_at.split(' ')[1] || d.updated_at;
+                } else {
+                    timeEl.textContent = '--:--:--';
+                }
+            }
+        }
+    } catch (err) {
+        console.debug('DS18B20 fetch error:', err);
     }
 }
 

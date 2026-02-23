@@ -57,4 +57,7 @@ urlpatterns = [
 
     # Device Identity / Config API
     path('api/v1/device-config/', views_simple.api_device_config, name='api_v1_device_config'),
+
+    # DS18B20 Sensor API
+    path('api/v1/sensors/ds18b20/', views_simple.api_ds18b20_latest, name='api_v1_ds18b20_latest'),
 ]

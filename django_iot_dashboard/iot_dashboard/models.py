@@ -375,6 +375,16 @@ class DeviceConfig(models.Model):
         verbose_name="MQTT Client ID Prefix",
         help_text="Prefix สำหรับ MQTT Client ID เช่น ThaiTechZone → ThaiTechZone_tti_board_001"
     )
+    # DS18B20 latest value cache
+    ds18b20_temperature = models.FloatField(
+        null=True, blank=True,
+        verbose_name='DS18B20 Temperature (°C)',
+        help_text='ค่าล่าสุดจาก DS18B20 sensor ที่รับผ่าน MQTT'
+    )
+    ds18b20_updated_at = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name='DS18B20 Last Updated'
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -427,6 +437,9 @@ class DeviceConfig(models.Model):
     def isolate_in_topic(self, port_num):
         return f"{self.get_base_topic()}/state/isolate_in{port_num}"
 
+    def ds18b20_topic(self):
+        return f"{self.get_base_topic()}/sensor/ds18b20"
+
     def get_all_topics_display(self):
         """คืน dict ของ topics ทั้งหมดเพื่อแสดงใน UI"""
         return {
@@ -442,6 +455,7 @@ class DeviceConfig(models.Model):
             'sensor_data': self.sensor_data_topic(),
             'temperature': self.temperature_topic(),
             'humidity': self.humidity_topic(),
+            'ds18b20': self.ds18b20_topic(),
         }
 
 

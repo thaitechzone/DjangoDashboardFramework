@@ -1577,3 +1577,33 @@ def api_device_config(request):
     except Exception as e:
         logger.error(f"❌ DeviceConfig API Error: {e}")
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+def api_ds18b20_latest(request):
+    """
+    GET → ดึงค่า DS18B20 temperature ล่าสุด จาก DeviceConfig cache
+    """
+    try:
+        config = DeviceConfig.get_config()
+
+        import pytz
+        bangkok_tz = pytz.timezone('Asia/Bangkok')
+
+        updated_str = None
+        if config.ds18b20_updated_at:
+            local_dt = config.ds18b20_updated_at.astimezone(bangkok_tz)
+            updated_str = local_dt.strftime('%Y-%m-%d %H:%M:%S')
+
+        return JsonResponse({
+            'success': True,
+            'data': {
+                'temperature': config.ds18b20_temperature,
+                'updated_at': updated_str,
+                'device_name': config.device_name,
+                'topic': config.ds18b20_topic(),
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"❌ DS18B20 API Error: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
