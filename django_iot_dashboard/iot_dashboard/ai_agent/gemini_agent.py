@@ -5,7 +5,7 @@ Uses Google Gemini AI to analyze weather and decide relay control
 
 import os
 import logging
-import google.generativeai as genai
+from google import genai
 from typing import Dict, Tuple, Optional
 from django.utils import timezone
 
@@ -19,16 +19,15 @@ class GeminiRelayAgent:
         
         if not self.api_key:
             logger.warning("⚠️ GEMINI_API_KEY not found in environment variables")
-            self.model = None
+            self.client = None
         else:
             try:
-                genai.configure(api_key=self.api_key)
-                # Use gemini-1.5-flash (faster, free tier) or gemini-1.5-pro (more capable)
-                self.model = genai.GenerativeModel('gemini-1.5-flash')
-                logger.info("✅ Gemini AI configured successfully (gemini-1.5-flash)")
+                self.client = genai.Client(api_key=self.api_key)
+                self.model_name = 'gemini-2.0-flash'
+                logger.info(f"✅ Gemini AI configured successfully ({self.model_name})")
             except Exception as e:
                 logger.error(f"❌ Error configuring Gemini AI: {e}")
-                self.model = None
+                self.client = None
     
     def analyze_and_decide(self, weather_data: Dict) -> Tuple[str, str, float]:
         """
@@ -43,7 +42,7 @@ class GeminiRelayAgent:
             - reasoning: AI's explanation
             - confidence: 0.0 to 1.0
         """
-        if not self.model:
+        if not self.client:
             logger.warning("⚠️ Gemini AI not configured, using fallback logic")
             return self._fallback_decision(weather_data)
         
@@ -52,7 +51,10 @@ class GeminiRelayAgent:
             prompt = self._create_prompt(weather_data)
             
             logger.info("🤖 Asking Gemini AI for decision...")
-            response = self.model.generate_content(prompt)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
             
             # Parse AI response
             decision, reasoning, confidence = self._parse_response(response.text)
