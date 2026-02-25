@@ -32,7 +32,7 @@
 
 | ส่วน | เทคโนโลยี | หน้าที่ |
 |------|-----------|---------|
-| **ESP32** | Arduino (C++) | อ่าน Sensor, ควบคุม Relay/LED, สื่อสารผ่าน MQTT |
+| **ESP32** | Arduino / PlatformIO (C++) | อ่าน Sensor, ควบคุม Relay/LED, สื่อสารผ่าน MQTT |
 | **Backend** | Django 5 + paho-mqtt | รับข้อมูล MQTT, บันทึก DB, ให้ REST API |
 | **Frontend** | HTML + Chart.js + Vanilla JS | แสดงกราฟ, ควบคุม Device แบบ Real-time |
 
@@ -75,48 +75,74 @@ DjangoDashboardFramework/
 
 ## 3. ESP32 (Firmware)
 
-**ไฟล์:** `ESP32_RELAY_CONTROL_FULL_CODE.ino`
+**Repository ESP32:** [thaitechzone/ESP32TestDashbordDjango](https://github.com/thaitechzone/ESP32TestDashbordDjango)
 
 ### Hardware ที่รองรับ
 
-| ส่วนประกอบ | รายละเอียด |
-|-----------|-----------|
-| **MCU** | ESP32 |
-| **Sensor 1** | XY-MD03 — อ่าน Temperature & Humidity (placeholder/random) |
-| **Sensor 2** | DS18B20 — อ่าน Temperature จริง (GPIO 13, 1-Wire) |
-| **Output** | Onboard LED (ควบคุมผ่าน MQTT) |
-| **Output** | Relay 1, 2, 3 (Active Low) |
-| **Input** | Digital Input แบบ Isolated 2 ช่อง (DI1, DI2) |
+| ส่วนประกอบ | GPIO | รายละเอียด |
+|-----------|------|-----------|
+| **MCU** | — | ESP32 |
+| **Onboard LED** | GPIO 2 | Active High (HIGH = เปิด) |
+| **DHT22 Sensor** | GPIO 15 | อ่าน Temperature & Humidity (ตอนนี้ใช้ random placeholder) |
+| **Relay 1** | GPIO 17 | Active Low (LOW = เปิด, HIGH = ปิด) |
+| **Relay 2** | GPIO 16 | Active Low |
+| **Relay 3** | GPIO 4 | Active Low |
+| **ปุ่ม SW1** | GPIO 34 | Toggle Relay 1 (External Pull-up 10kΩ) |
+| **ปุ่ม SW2** | GPIO 35 | Toggle Relay 2 (External Pull-up 10kΩ) |
+| **ปุ่ม SW3** | GPIO 32 | Toggle Relay 3 (Internal Pull-up) |
+| **OLED Display** | GPIO 21 (SDA), GPIO 22 (SCL) | SSD1306 128×64, I2C (optional) |
+
+### การต่อสาย
+
+```
+DHT22          ESP32
+──────────────────────
+VCC   →  3.3V
+DATA  →  GPIO 15  (+ Resistor Pull-up 10kΩ ไป 3.3V)
+GND   →  GND
+
+Relay Module   ESP32
+──────────────────────
+VCC   →  5V
+GND   →  GND
+IN1   →  GPIO 17  (Relay 1)
+IN2   →  GPIO 16  (Relay 2)
+IN3   →  GPIO 4   (Relay 3)
+
+OLED SSD1306   ESP32
+──────────────────────
+VCC   →  3.3V
+GND   →  GND
+SDA   →  GPIO 21
+SCL   →  GPIO 22
+```
 
 ### การตั้งค่า Firmware
 
-เปิดไฟล์ `.ino` แล้วแก้ค่าตามนี้:
+เปิดไฟล์ `src/main.cpp` แล้วแก้ค่าตามนี้:
 
 ```cpp
-// ชื่อ Device (ต้องตรงกับที่ตั้งใน Django Dashboard)
-#define DEVICE_NAME "ttz_board_001"
-
 // WiFi
-const char* ssid     = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* WIFI_SSID     = "YOUR_WIFI_SSID";
+const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
 
 // MQTT Broker (ใช้ HiveMQ Public ฟรี)
-const char* mqtt_server = "broker.hivemq.com";
-const int   mqtt_port   = 1883;
+const char* MQTT_BROKER = "broker.hivemq.com";
+const int   MQTT_PORT   = 1883;
+const char* MQTT_CLIENT_ID = "ESP_ThaiTechZone_LED_Controller_01";
 ```
-
-> ⚠️ **หากมีหลายบอร์ด** ให้เปลี่ยน `DEVICE_NAME` ก่อน Flash แต่ละบอร์ด
-> ```
-> ttz_board_001  →  Board 1
-> ttz_board_002  →  Board 2
-> ```
 
 ### การทำงานของ Firmware
 
-- **เชื่อมต่อ WiFi** → เชื่อมต่อ MQTT Broker
-- **ส่งข้อมูล Sensor** ทุก 5 วินาที (Temperature, Humidity, DS18B20)
-- **รับคำสั่ง** จาก Django เพื่อเปิด/ปิด LED และ Relay
-- **ส่งสถานะ** กลับมาเพื่อให้ Dashboard แสดงผลถูกต้อง
+- **เชื่อมต่อ WiFi** → เชื่อมต่อ MQTT Broker อัตโนมัติ
+- **ส่งข้อมูล Sensor** ทุก 5 วินาที (Temperature, Humidity)
+- **รับคำสั่ง** จาก Django เพื่อเปิด/ปิด LED และ Relay 1/2/3
+- **ส่งสถานะ** กลับเมื่อมีการเปลี่ยนแปลง (retain=true)
+- **ปุ่ม Physical** SW1/SW2/SW3 toggle Relay ได้โดยตรง (ไม่ต้องผ่าน Dashboard)
+- **OLED Display** แสดงสถานะ WiFi, MQTT, Relay, Temperature/Humidity แบบ Real-time
+
+> ⚠️ ตอนนี้ค่า Temperature/Humidity เป็น **random values** (placeholder)  
+> แก้ได้ใน `readAndPublishSensorData()` โดย uncomment บรรทัดที่ใช้ `dht.readTemperature()`
 
 ---
 
@@ -209,11 +235,13 @@ runserver → apps.py → MQTTManager เชื่อมต่อ broker.hivemq.
 ### รูปแบบ Topic
 
 ```
-thaitechzone/v2/<DEVICE_ID>/<direction>/<property>
+thaitechzone/v2_board/<direction>/<property>
 ```
 
-- `DEVICE_ID` = ชื่อบอร์ด เช่น `ttz_board_001`
-- `direction` = `control` (Django → ESP32) หรือ `state`/`sensor` (ESP32 → Django)
+- `direction` = `control` (Django ส่งคำสั่ง → ESP32 รับ)
+- `direction` = `state` หรือ `sensor` (ESP32 ส่งสถานะ/ข้อมูล → Django รับ)
+
+> 📌 Topic ในโปรเจกต์นี้ **ไม่มี Device ID** ใน path — ใช้ `v2_board` คงที่
 
 ### Topics ทั้งหมด
 
@@ -221,46 +249,42 @@ thaitechzone/v2/<DEVICE_ID>/<direction>/<property>
 
 | Topic | ทิศทาง | Payload |
 |-------|--------|---------|
-| `thaitechzone/v2/ttz_board_001/control/led` | Django **ส่ง** → ESP32 รับ | `ON` หรือ `OFF` |
-| `thaitechzone/v2/ttz_board_001/state/led` | ESP32 **ส่ง** → Django รับ | `ON` หรือ `OFF` |
+| `thaitechzone/v2_board/control/led` | Django **ส่ง** → ESP32 รับ | `ON` หรือ `OFF` |
+| `thaitechzone/v2_board/state/led` | ESP32 **ส่ง** → Django รับ | `ON` หรือ `OFF` (retain=true) |
 
 #### 🔌 Relay
 
 | Topic | ทิศทาง | Payload |
 |-------|--------|---------|
-| `thaitechzone/v2/ttz_board_001/control/relay1` | Django → ESP32 | `ON` / `OFF` |
-| `thaitechzone/v2/ttz_board_001/control/relay2` | Django → ESP32 | `ON` / `OFF` |
-| `thaitechzone/v2/ttz_board_001/control/relay3` | Django → ESP32 | `ON` / `OFF` |
-| `thaitechzone/v2/ttz_board_001/state/relay1` | ESP32 → Django | `ON` / `OFF` |
-| `thaitechzone/v2/ttz_board_001/state/relay2` | ESP32 → Django | `ON` / `OFF` |
-| `thaitechzone/v2/ttz_board_001/state/relay3` | ESP32 → Django | `ON` / `OFF` |
+| `thaitechzone/v2_board/control/relay1` | Django → ESP32 | `ON` / `OFF` |
+| `thaitechzone/v2_board/control/relay2` | Django → ESP32 | `ON` / `OFF` |
+| `thaitechzone/v2_board/control/relay3` | Django → ESP32 | `ON` / `OFF` |
+| `thaitechzone/v2_board/state/relay1` | ESP32 → Django | `ON` / `OFF` (retain=true) |
+| `thaitechzone/v2_board/state/relay2` | ESP32 → Django | `ON` / `OFF` (retain=true) |
+| `thaitechzone/v2_board/state/relay3` | ESP32 → Django | `ON` / `OFF` (retain=true) |
 
-> ⚙️ Relay บนบอร์ดเป็น **Active Low** (LOW = เปิด, HIGH = ปิด) แต่ Firmware แปลง `ON`/`OFF` ให้อัตโนมัติ
+> ⚙️ Relay เป็น **Active Low** (LOW = เปิด, HIGH = ปิด) แต่ Firmware แปลง `ON`/`OFF` ให้อัตโนมัติ  
+> ปุ่ม Physical SW1/SW2/SW3 ก็ toggle Relay และส่งสถานะกลับ MQTT ด้วย
 
-#### 🌡️ Sensor
+#### 🌡️ Sensor (DHT22)
 
 | Topic | ทิศทาง | Payload | หมายเหตุ |
 |-------|--------|---------|----------|
-| `thaitechzone/v2/ttz_board_001/sensor/temperature` | ESP32 → Django | `"27.5"` (°C) | Random placeholder |
-| `thaitechzone/v2/ttz_board_001/sensor/humidity` | ESP32 → Django | `"65.3"` (%) | Random placeholder |
-| `thaitechzone/v2/ttz_board_001/sensor/data` | ESP32 → Django | JSON (ดูด้านล่าง) | ส่งทุก 5 วินาที |
-| `thaitechzone/v2/ttz_board_001/sensor/ds18b20` | ESP32 → Django | `"27.5"` (°C) | ค่าจริงจาก DS18B20 |
+| `thaitechzone/v2_board/sensor/temperature` | ESP32 → Django | `"27.5"` (°C) | Random placeholder |
+| `thaitechzone/v2_board/sensor/humidity` | ESP32 → Django | `"65.3"` (%) | Random placeholder |
+| `thaitechzone/v2_board/sensor/data` | ESP32 → Django | JSON (ดูด้านล่าง) | ส่งทุก 5 วินาที |
 
 ```json
 // Payload ของ sensor/data
 {
   "temperature": 27.5,
   "humidity": 65.3,
-  "device_name": "ttz_board_001"
+  "device_name": "ESP_01"
 }
 ```
 
-#### 📥 Digital Input (DI)
-
-| Topic | ทิศทาง | Payload |
-|-------|--------|---------|
-| `thaitechzone/v2/ttz_board_001/state/isolate_in1` | ESP32 → Django | `ON` / `OFF` |
-| `thaitechzone/v2/ttz_board_001/state/isolate_in2` | ESP32 → Django | `ON` / `OFF` |
+> ⚠️ ค่า `temperature` และ `humidity` ยังเป็น **random values**  
+> แก้ได้ใน `readAndPublishSensorData()` ใน `src/main.cpp`
 
 ### MQTT Broker
 - **Broker:** `broker.hivemq.com`
@@ -400,5 +424,9 @@ MIT License — ใช้ฟรี แก้ไขได้ เผยแพร�
 
 ---
 
-> **ThaiTechZone** — IoT Dashboard Framework  
-> GitHub: [thaitechzone/DjangoDashboardFramework](https://github.com/thaitechzone/DjangoDashboardFramework)
+> **ThaiTechZone** — IoT Dashboard Framework
+
+| Repository | Link |
+|-----------|------|
+| **Django Backend** | [thaitechzone/DjangoDashboardFramework](https://github.com/thaitechzone/DjangoDashboardFramework) |
+| **ESP32 Firmware** | [thaitechzone/ESP32TestDashbordDjango](https://github.com/thaitechzone/ESP32TestDashbordDjango) |
