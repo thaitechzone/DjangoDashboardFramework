@@ -8,6 +8,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from django.utils import timezone
 from django.conf import settings
+from datetime import datetime, timedelta
 import os
 
 from .weather_service import WeatherService
@@ -34,10 +35,13 @@ class AIAgentScheduler:
             return
         
         try:
+            # Delay first run by 60s to avoid DB access during app initialization (AppConfig.ready())
+            first_run_time = datetime.now() + timedelta(seconds=60)
+
             # Add job to run every N minutes
             self.scheduler.add_job(
                 func=self.analyze_and_control,
-                trigger=IntervalTrigger(minutes=self.interval_minutes),
+                trigger=IntervalTrigger(minutes=self.interval_minutes, start_date=first_run_time),
                 id='ai_weather_analysis',
                 name='AI Weather Analysis and Relay Control',
                 replace_existing=True
@@ -48,9 +52,7 @@ class AIAgentScheduler:
             
             logger.info(f"✅ AI Agent Scheduler started successfully!")
             logger.info(f"🕐 Analysis interval: Every {self.interval_minutes} minutes")
-            
-            # Run initial analysis
-            self.analyze_and_control()
+            logger.info(f"⏳ First analysis scheduled at: {first_run_time.strftime('%H:%M:%S')} (60s delay)")
             
         except Exception as e:
             logger.error(f"❌ Error starting AI Agent Scheduler: {e}")

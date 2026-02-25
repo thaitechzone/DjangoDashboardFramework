@@ -1,4 +1,18 @@
+# Database
 *.sqlite3
 django_iot_dashboard/db.sqlite3
-*.sqlite3
-django_iot_dashboard/db.sqlite3
+
+# Environment variables (contains API keys - NEVER commit)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+
+# Logs
+*.log

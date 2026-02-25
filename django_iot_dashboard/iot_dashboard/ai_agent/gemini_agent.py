@@ -4,18 +4,24 @@ Uses Google Gemini AI to analyze weather and decide relay control
 """
 
 import os
+import time
 import logging
+from datetime import datetime, timedelta
 from google import genai
 from typing import Dict, Tuple, Optional
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
+# Cooldown duration when free-tier daily quota is exhausted (1 hour)
+QUOTA_COOLDOWN_HOURS = 1
+
 class GeminiRelayAgent:
     """AI Agent using Google Gemini for intelligent relay control"""
     
     def __init__(self):
         self.api_key = os.getenv('GEMINI_API_KEY')
+        self._quota_exhausted_until: Optional[datetime] = None  # cooldown tracker
         
         if not self.api_key:
             logger.warning("⚠️ GEMINI_API_KEY not found in environment variables")
@@ -46,6 +52,12 @@ class GeminiRelayAgent:
             logger.warning("⚠️ Gemini AI not configured, using fallback logic")
             return self._fallback_decision(weather_data)
         
+        # Check if still in quota cooldown period
+        if self._quota_exhausted_until and datetime.now() < self._quota_exhausted_until:
+            remaining = int((self._quota_exhausted_until - datetime.now()).total_seconds() / 60)
+            logger.warning(f"⏳ Quota cooldown active — skipping AI call, {remaining} min remaining. Using fallback logic.")
+            return self._fallback_decision(weather_data)
+        
         try:
             # Create prompt for Gemini
             prompt = self._create_prompt(weather_data)
@@ -56,6 +68,9 @@ class GeminiRelayAgent:
                 contents=prompt
             )
             
+            # Successful call — clear any previous cooldown
+            self._quota_exhausted_until = None
+
             # Parse AI response
             decision, reasoning, confidence = self._parse_response(response.text)
             
@@ -65,7 +80,16 @@ class GeminiRelayAgent:
             return decision, reasoning, confidence
             
         except Exception as e:
-            logger.error(f"❌ Error getting AI decision: {e}")
+            error_str = str(e)
+            if '429' in error_str or 'RESOURCE_EXHAUSTED' in error_str:
+                self._quota_exhausted_until = datetime.now() + timedelta(hours=QUOTA_COOLDOWN_HOURS)
+                logger.warning(
+                    f"⚠️ Gemini free-tier quota exhausted. "
+                    f"AI calls paused for {QUOTA_COOLDOWN_HOURS}h until {self._quota_exhausted_until.strftime('%H:%M:%S')}. "
+                    f"Using fallback rule-based logic."
+                )
+            else:
+                logger.error(f"❌ Error getting AI decision: {e}")
             return self._fallback_decision(weather_data)
     
     def _create_prompt(self, weather: Dict) -> str:
