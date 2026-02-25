@@ -1,7 +1,8 @@
-# คู่มือการ Deploy Django IoT Dashboard บน VPS
+# คู่มือการ Deploy Django IoT Dashboard บน Hostinger VPS
 
 ## สารบัญ
-1. [เตรียม VPS](#1-เตรียม-vps)
+0. [เตรียม Hostinger VPS](#0-เตรียม-hostinger-vps)
+1. [เชื่อมต่อและตั้งค่าเบื้องต้น](#1-เชื่อมต่อและตั้งค่าเบื้องต้น)
 2. [ติดตั้ง Dependencies](#2-ติดตั้ง-dependencies)
 3. [Clone โปรเจคและตั้งค่า Python Environment](#3-clone-โปรเจคและตั้งค่า-python-environment)
 4. [ตั้งค่า Environment Variables](#4-ตั้งค่า-environment-variables)
@@ -20,29 +21,106 @@
 
 ## สิ่งที่ต้องมีก่อน
 
-- VPS รัน **Ubuntu 22.04 LTS** (แนะนำ) หรือ Ubuntu 20.04
-- RAM อย่างน้อย **1 GB** (แนะนำ 2 GB)
-- โดเมน หรือ IP สาธารณะ
-- SSH access เข้า VPS
+| รายการ | รายละเอียด |
+|--------|------------|
+| **Hostinger VPS Plan** | KVM 1 ขึ้นไป (RAM ≥ 1 GB, แนะนำ 2 GB) |
+| **OS** | Ubuntu 22.04 LTS (เลือกตอนสร้าง VPS ใน hPanel) |
+| **โดเมน** | โดเมนที่ชี้ A Record มาที่ IP ของ VPS แล้ว |
+| **บัญชี GitHub** | สำหรับ clone repo |
+| **Google API Key** | Gemini AI (ถ้าใช้ฟีเจอร์ AI) |
 
 ---
 
-## 1. เตรียม VPS
+## 0. เตรียม Hostinger VPS
+
+### 0.1 สร้าง VPS ใน hPanel
+
+1. Login เข้า [hPanel](https://hpanel.hostinger.com)
+2. ไปที่ **VPS** → **Create New Virtual Machine**
+3. เลือก Plan ที่ต้องการ (แนะนำ **KVM 2** ขึ้นไปสำหรับโปรเจคนี้)
+4. เลือก **OS: Ubuntu 22.04** (ไม่ต้องเลือก OS ที่มี Panel เพราะจะติดตั้งเองทั้งหมด)
+5. เลือก **Location** ที่ใกล้ผู้ใช้งาน (เช่น Singapore สำหรับไทย)
+6. ตั้งชื่อ Hostname และจด **Root Password** ที่ได้
+
+> **Tip:** สามารถเพิ่ม SSH Public Key ได้ตอนสร้าง VPS — แนะนำให้ทำเพื่อความสะดวกในการ Login
+
+### 0.2 ดู IP Address ของ VPS
+ใน hPanel → **VPS** → เลือก VPS → จดค่า **IPv4 Address**
+
+### 0.3 ชี้โดเมนมาที่ VPS (ถ้ามีโดเมนกับ Hostinger)
+
+1. ไปที่ **Domains** → เลือกโดเมน → **DNS Zone**
+2. แก้ไข **A Record** ของ `@` และ `www` ให้ชี้มาที่ IP ของ VPS
+3. รอ DNS propagate ประมาณ 5–30 นาที
+
+```
+Type    Name    Value              TTL
+A       @       <YOUR_VPS_IP>      300
+A       www     <YOUR_VPS_IP>      300
+```
+
+> ตรวจสอบ DNS propagation ที่ https://dnschecker.org
+
+### 0.4 ตั้งค่า Firewall ใน hPanel (VPS Firewall)
+
+Hostinger มี Firewall ระดับ Network ใน hPanel แยกจาก UFW บนเซิร์ฟเวอร์:
+
+1. ไปที่ **VPS** → เลือก VPS → **Firewall**
+2. เพิ่ม Rules ดังนี้:
+
+| Port | Protocol | Action | คำอธิบาย |
+|------|----------|--------|----------|
+| 22 | TCP | Allow | SSH |
+| 80 | TCP | Allow | HTTP |
+| 443 | TCP | Allow | HTTPS |
+| 1883 | TCP | Allow | MQTT (เปิดถ้า ESP32 connect จากภายนอก) |
+
+---
+
+## 1. เชื่อมต่อและตั้งค่าเบื้องต้น
 
 ### 1.1 เชื่อมต่อ SSH
 ```bash
+# ใช้ Password (Root Password จาก hPanel)
 ssh root@<YOUR_VPS_IP>
+
+# หรือใช้ SSH Key (ถ้าเพิ่มไว้ตอนสร้าง VPS)
+ssh -i ~/.ssh/id_rsa root@<YOUR_VPS_IP>
 ```
+
+> **Tip (Windows):** ใช้ **Windows Terminal** หรือ **PuTTY** ก็ได้  
+> ใน hPanel ยังมี **Browser Terminal** ให้ใช้ได้โดยไม่ต้องติดตั้งอะไร
 
 ### 1.2 อัปเดตระบบ
 ```bash
 apt update && apt upgrade -y
+apt autoremove -y
 ```
 
-### 1.3 สร้าง User ใหม่ (ไม่ควรใช้ root)
+### 1.3 ตั้งค่า Hostname (แนะนำ)
+```bash
+hostnamectl set-hostname iot-dashboard
+```
+
+### 1.4 ตั้งค่า Timezone
+```bash
+timedatectl set-timezone Asia/Bangkok
+timedatectl status   # ตรวจสอบ
+```
+
+### 1.5 สร้าง User ใหม่ (ไม่ควรใช้ root)
 ```bash
 adduser deploy
 usermod -aG sudo deploy
+
+# Copy SSH authorized_keys จาก root ไปให้ deploy (ถ้าใช้ SSH Key)
+mkdir -p /home/deploy/.ssh
+cp /root/.ssh/authorized_keys /home/deploy/.ssh/
+chown -R deploy:deploy /home/deploy/.ssh
+chmod 700 /home/deploy/.ssh
+chmod 600 /home/deploy/.ssh/authorized_keys
+
+# สลับไปยัง user deploy
 su - deploy
 ```
 
@@ -57,15 +135,25 @@ sudo apt install -y git curl wget build-essential
 sudo apt install -y libpq-dev python3-dev  # เผื่อเปลี่ยนเป็น PostgreSQL ในอนาคต
 ```
 
-### 2.2 ติดตั้ง Nginx
+### 2.2 ตรวจสอบเวอร์ชัน Python
 ```bash
-sudo apt install -y nginx
+python3 --version   # ควรได้ Python 3.10+ บน Ubuntu 22.04
 ```
 
-### 2.3 ติดตั้ง Certbot (สำหรับ SSL)
+### 2.3 ติดตั้ง Nginx
+```bash
+sudo apt install -y nginx
+sudo systemctl start nginx
+sudo systemctl enable nginx
+```
+
+### 2.4 ติดตั้ง Certbot (สำหรับ SSL)
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
 ```
+
+### 2.5 ทดสอบว่า Nginx ทำงานอยู่
+เปิด Browser แล้วไปที่ `http://<YOUR_VPS_IP>` — ควรเห็นหน้า **"Welcome to nginx!"**
 
 ---
 
@@ -78,11 +166,18 @@ git clone https://github.com/thaitechzone/DjangoDashboardFramework.git
 cd DjangoDashboardFramework
 ```
 
+> ถ้า Repo เป็น Private ต้อง [สร้าง Personal Access Token](https://github.com/settings/tokens) ก่อน แล้วใช้:
+> ```bash
+> git clone https://<TOKEN>@github.com/thaitechzone/DjangoDashboardFramework.git
+> ```
+
 ### 3.2 สร้าง Virtual Environment
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
+
+> **หมายเหตุ:** ต้องรัน `source venv/bin/activate` ทุกครั้งที่ Login ใหม่ก่อนรันคำสั่ง Python/pip
 
 ### 3.3 ติดตั้ง Python Packages
 ```bash
@@ -93,6 +188,11 @@ pip install -r django_iot_dashboard/requirements.txt
 ### 3.4 ติดตั้ง Gunicorn และ python-dotenv (ถ้ายังไม่มีใน requirements.txt)
 ```bash
 pip install gunicorn python-dotenv
+```
+
+### 3.5 ตรวจสอบ Packages ที่ติดตั้ง
+```bash
+pip list | grep -E "Django|gunicorn|paho|dotenv"
 ```
 
 ---
@@ -432,16 +532,31 @@ sudo systemctl status mqtt_listener
 
 ## 13. ตั้งค่า Firewall
 
-### 13.1 ติดตั้งและตั้งค่า UFW
+### 13.1 ตั้งค่า UFW บนเซิร์ฟเวอร์
+
+> **Hostinger VPS มี 2 ชั้น Firewall:**
+> 1. **hPanel Firewall** — Network-level (ทำใน Step 0.4 แล้ว)
+> 2. **UFW (Uncomplicated Firewall)** — OS-level บนเซิร์ฟเวอร์ (ทำในขั้นตอนนี้)
+> ทั้งสองต้องเปิด Port ที่ต้องการพร้อมกัน
+
 ```bash
-sudo ufw allow OpenSSH
-sudo ufw allow 'Nginx Full'   # รองรับทั้ง HTTP (80) และ HTTPS (443)
-sudo ufw allow 1883/tcp       # MQTT (เปิดเฉพาะถ้า ESP32 connect จากภายนอก)
-sudo ufw enable
+# ตรวจสอบสถานะ UFW ปัจจุบัน
 sudo ufw status
+
+# เพิ่ม Rules
+sudo ufw allow OpenSSH         # Port 22 (SSH)
+sudo ufw allow 'Nginx Full'    # Port 80 (HTTP) + 443 (HTTPS)
+sudo ufw allow 1883/tcp        # MQTT (เปิดเฉพาะถ้า ESP32 connect จากภายนอก)
+
+# เปิดใช้งาน UFW
+sudo ufw enable
+sudo ufw status verbose
 ```
 
-> **หมายเหตุ**: ถ้า ESP32 อยู่ใน network เดียวกับ VPS ไม่จำเป็นต้องเปิด port 1883 ออกสาธารณะ
+> **⚠️ สำคัญ:** รัน `sudo ufw allow OpenSSH` **ก่อน** `sudo ufw enable` เสมอ  
+> ไม่งั้นจะถูก Block SSH แล้วเข้า Server ไม่ได้ → ต้องใช้ Browser Terminal ใน hPanel แทน
+
+> **หมายเหตุ**: ถ้า ESP32 connect มายัง HiveMQ Public Broker ไม่ต้องเปิด Port 1883 บน VPS
 
 ---
 
@@ -512,7 +627,7 @@ Internet
 
 ## อัปเดตโปรเจค (Deployment ครั้งต่อไป)
 
-เมื่อมีการแก้ไข code และต้องการอัปเดต VPS:
+เมื่อมีการแก้ไข code แล้ว push ขึ้น GitHub และต้องการอัปเดต VPS:
 
 ```bash
 cd /home/deploy/DjangoDashboardFramework
@@ -521,10 +636,10 @@ source venv/bin/activate
 # ดึง code ใหม่
 git pull origin main
 
-# ติดตั้ง packages ใหม่ (ถ้ามี)
+# ติดตั้ง packages ใหม่ (ถ้า requirements.txt เปลี่ยน)
 pip install -r django_iot_dashboard/requirements.txt
 
-# รัน migrations ใหม่ (ถ้ามี)
+# รัน migrations ใหม่ (ถ้ามี model เปลี่ยน)
 cd django_iot_dashboard
 python manage.py migrate
 
@@ -534,4 +649,54 @@ python manage.py collectstatic --noinput
 # Restart services
 sudo systemctl restart gunicorn
 sudo systemctl restart mqtt_listener
+
+# ตรวจสอบว่าทุก Service ยังทำงานปกติ
+sudo systemctl status gunicorn mqtt_listener nginx mosquitto
+```
+
+---
+
+## Checklist ตรวจสอบก่อน Go-Live
+
+- [ ] DNS A Record ชี้มาที่ IP ของ VPS แล้ว
+- [ ] hPanel Firewall เปิด Port 22, 80, 443 แล้ว
+- [ ] UFW เปิดใช้งานและ Allow ports ถูกต้อง
+- [ ] ไฟล์ `.env` สร้างแล้วและ `chmod 600`
+- [ ] `DEBUG=False` ใน `.env`
+- [ ] `ALLOWED_HOSTS` มีชื่อโดเมนและ IP ครบ
+- [ ] `python manage.py migrate` รันแล้ว
+- [ ] `python manage.py collectstatic` รันแล้ว
+- [ ] SSL Certificate ได้รับและ Nginx อัปเดตแล้ว
+- [ ] `SECURE_SSL_REDIRECT = True` เปิดใช้งาน
+- [ ] Services ทั้งหมด (gunicorn, nginx, mosquitto, mqtt_listener) status = active
+- [ ] ทดสอบ Login ระบบ และ Dashboard โหลดปกติ
+- [ ] ทดสอบ MQTT ส่งข้อมูลจาก ESP32 และ Dashboard รับได้
+
+---
+
+## คำสั่งที่ใช้บ่อย (Quick Reference)
+
+```bash
+# ดู Log แบบ real-time
+sudo journalctl -u gunicorn -f
+sudo journalctl -u mqtt_listener -f
+sudo tail -f /var/log/nginx/error.log
+
+# Restart Services
+sudo systemctl restart gunicorn nginx mosquitto mqtt_listener
+
+# ตรวจสอบ Port ที่เปิดอยู่
+sudo ss -tlnp
+
+# ทดสอบ Nginx Config
+sudo nginx -t
+
+# ดู Disk/Memory ที่เหลือ
+df -h
+free -h
+
+# เข้า Django Shell
+cd /home/deploy/DjangoDashboardFramework/django_iot_dashboard
+source /home/deploy/DjangoDashboardFramework/venv/bin/activate
+python manage.py shell
 ```
