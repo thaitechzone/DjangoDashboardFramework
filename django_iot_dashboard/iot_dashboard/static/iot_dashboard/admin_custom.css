@@ -1,3 +1,13 @@
+/* ─── GeminiAISettings — hide all default submit rows (using inline button instead) ─── */
+.model-geminiaisettings.change-form .submit-row {
+    display: none !important;
+}
+
+/* ─── WeatherAPISettings — hide all default submit rows (using inline button instead) ─── */
+.model-weatherapisettings.change-form .submit-row {
+    display: none !important;
+}
+
 /* ─── AI Decision Log — force left-align all columns ─── */
 .model-aidecisionlog #result_list th,
 .model-aidecisionlog #result_list td {

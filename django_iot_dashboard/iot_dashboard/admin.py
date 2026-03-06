@@ -651,17 +651,26 @@ class WeatherAPISettingsAdmin(admin.ModelAdmin):
     class Media:
         css = {'all': ('iot_dashboard/admin_custom.css',)}
 
-    readonly_fields = ('test_connect_button', 'test_result_panel')
+    readonly_fields = ('test_connect_button', 'test_result_panel', 'save_inline_button')
 
     fieldsets = (
         ('🌤️ OpenWeatherMap API', {
             'description': 'สมัครขอ API Key ได้ฟรีที่ <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a>',
-            'fields': ('api_key', 'location', 'units', 'is_enabled'),
+            'fields': ('api_key', 'location', 'units', 'is_enabled', 'save_inline_button'),
         }),
         ('🧪 ผลทดสอบล่าสุด', {
             'fields': ('test_connect_button', 'test_result_panel'),
         }),
     )
+
+    def save_inline_button(self, obj):
+        return format_html(
+            '<button type="submit" name="_continue" '
+            'style="padding:7px 24px;background:#417690;color:#fff;border:none;'
+            'border-radius:4px;font-size:13px;cursor:pointer;font-weight:bold;">'
+            '💾 บันทึก</button>'
+        )
+    save_inline_button.short_description = ''
 
     def has_add_permission(self, request):
         return not WeatherAPISettings.objects.exists()
@@ -862,20 +871,28 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
     class Media:
         css = {'all': ('iot_dashboard/admin_custom.css',)}
 
-    readonly_fields = ('test_connect_button', 'test_result_panel', 'model_presets_panel')
+    readonly_fields = ('test_connect_button', 'test_result_panel', 'model_presets_panel', 'save_inline_button')
 
     fieldsets = (
         ('🤖 AI Provider Settings', {
             'description':
                 '🟢 <b>OpenRouter</b>: สมัครและเติมเงินที่ <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a> '
-                '— เลือก model ได้จาก <a href="https://openrouter.ai/models" target="_blank">openrouter.ai/models</a><br>'
-                '🔵 <b>Gemini Direct</b>: สร้าง key ที่ <a href="https://makersuite.google.com/app/apikey" target="_blank">makersuite.google.com/app/apikey</a>',
-            'fields': ('provider', 'api_key', 'model_name', 'model_presets_panel', 'interval_minutes', 'is_enabled'),
+                '— เลือก model ได้จาก <a href="https://openrouter.ai/models" target="_blank">openrouter.ai/models</a>',
+            'fields': ('api_key', 'model_name', 'model_presets_panel', 'interval_minutes', 'is_enabled', 'save_inline_button'),
         }),
         ('🧪 ผลทดสอบล่าสุด', {
             'fields': ('test_connect_button', 'test_result_panel'),
         }),
     )
+
+    def save_inline_button(self, obj):
+        return format_html(
+            '<button type="submit" name="_continue" '
+            'style="padding:7px 24px;background:#417690;color:#fff;border:none;'
+            'border-radius:4px;font-size:13px;cursor:pointer;font-weight:bold;">'  
+            '💾 บันทึก</button>'
+        )
+    save_inline_button.short_description = ''
 
     def has_add_permission(self, request):
         return not GeminiAISettings.objects.exists()
@@ -907,24 +924,14 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
             self.message_user(request, '⚠️ ยังไม่ได้ตั้งค่า API Key', level='WARNING')
             return redirect(redirect_url)
         try:
-            if obj.provider == 'openrouter':
-                from openai import OpenAI
-                client = OpenAI(base_url='https://openrouter.ai/api/v1', api_key=obj.api_key)
-                response = client.chat.completions.create(
-                    model=obj.model_name,
-                    messages=[{'role': 'user', 'content': 'Reply with exactly: OK'}],
-                )
-                reply = (response.choices[0].message.content or '').strip()
-                provider_name = 'OpenRouter'
-            else:
-                from google import genai
-                client = genai.Client(api_key=obj.api_key)
-                response = client.models.generate_content(
-                    model=obj.model_name,
-                    contents='Reply with exactly: OK'
-                )
-                reply = (response.text or '').strip()
-                provider_name = 'Gemini Direct'
+            from openai import OpenAI
+            client = OpenAI(base_url='https://openrouter.ai/api/v1', api_key=obj.api_key)
+            response = client.chat.completions.create(
+                model=obj.model_name,
+                messages=[{'role': 'user', 'content': 'Reply with exactly: OK'}],
+            )
+            reply = (response.choices[0].message.content or '').strip()
+            provider_name = 'OpenRouter'
 
             obj.last_test_ok = True
             obj.last_test_msg = (
@@ -947,11 +954,7 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
             obj.last_tested = timezone.now()
             obj.last_test_ok = False
             if '429' in err or 'RESOURCE_EXHAUSTED' in err or 'rate_limit' in err.lower():
-                quota_link = (
-                    'https://openrouter.ai/settings/limits'
-                    if obj.provider == 'openrouter'
-                    else 'https://aistudio.google.com/app/apikey'
-                )
+                quota_link = 'https://openrouter.ai/settings/limits'
                 obj.last_test_msg = (
                     '⚠️ Quota เกินแล้ว (429 Rate Limit)\n'
                     'API Key ยังถูกต้อง แต่ใช้ quota เกินกำหนด\n'
@@ -1033,31 +1036,23 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
     def model_presets_panel(self, obj):
         OPENROUTER_MODELS = [
             ('🆓 Free', [
-                ('google/gemini-2.0-flash:free',      'Gemini 2.0 Flash (Free)'),
-                ('google/gemini-2.5-pro:free',        'Gemini 2.5 Pro (Free)'),
-                ('meta-llama/llama-3.3-70b-instruct:free', 'Llama 3.3 70B (Free)'),
-                ('deepseek/deepseek-chat:free',       'DeepSeek Chat (Free)'),
-                ('mistralai/mistral-7b-instruct:free','Mistral 7B (Free)'),
+                ('google/gemini-2.0-flash-exp:free',            'Gemini 2.0 Flash Exp (Free)'),
+                ('google/gemini-2.5-pro-exp-03-25:free',        'Gemini 2.5 Pro Exp (Free)'),
+                ('meta-llama/llama-3.3-70b-instruct:free',      'Llama 3.3 70B (Free)'),
+                ('deepseek/deepseek-chat:free',                 'DeepSeek Chat (Free)'),
+                ('mistralai/mistral-7b-instruct:free',          'Mistral 7B (Free)'),
             ]),
             ('💎 Paid', [
-                ('google/gemini-2.0-flash',           'Gemini 2.0 Flash'),
-                ('google/gemini-2.5-pro',             'Gemini 2.5 Pro'),
-                ('anthropic/claude-3.5-sonnet',       'Claude 3.5 Sonnet'),
-                ('anthropic/claude-3-haiku',          'Claude 3 Haiku'),
-                ('openai/gpt-4o-mini',                'GPT-4o Mini'),
-                ('openai/gpt-4o',                     'GPT-4o'),
-                ('meta-llama/llama-3.1-405b-instruct','Llama 3.1 405B'),
+                ('google/gemini-2.0-flash-001',                 'Gemini 2.0 Flash'),
+                ('google/gemini-2.5-pro-preview-03-25',         'Gemini 2.5 Pro'),
+                ('anthropic/claude-3.5-sonnet',                 'Claude 3.5 Sonnet'),
+                ('anthropic/claude-3-haiku',                    'Claude 3 Haiku'),
+                ('openai/gpt-4o-mini',                          'GPT-4o Mini'),
+                ('openai/gpt-4o',                               'GPT-4o'),
+                ('meta-llama/llama-3.1-405b-instruct',          'Llama 3.1 405B'),
             ]),
         ]
-        GEMINI_MODELS = [
-            ('🔵 Gemini Direct', [
-                ('gemini-2.0-flash',      'Gemini 2.0 Flash'),
-                ('gemini-2.5-pro',        'Gemini 2.5 Pro'),
-                ('gemini-1.5-flash',      'Gemini 1.5 Flash'),
-                ('gemini-1.5-pro',        'Gemini 1.5 Pro'),
-            ]),
-        ]
-        model_groups = GEMINI_MODELS if (obj and obj.provider == 'gemini') else OPENROUTER_MODELS
+        model_groups = OPENROUTER_MODELS
         chips_html = ''
         for group_label, models in model_groups:
             chips_html += (

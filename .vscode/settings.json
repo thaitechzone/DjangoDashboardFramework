@@ -7,6 +7,10 @@
         "/^python -c \"import openai; print\\(openai\\.__version__\\)\"$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^d:\\\\GitHub\\\\DjangoDashboardFramework\\\\django_iot_dashboard\\\\venv\\\\Scripts\\\\pip\\.exe install -r d:\\\\GitHub\\\\DjangoDashboardFramework\\\\django_iot_dashboard\\\\requirements\\.txt$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

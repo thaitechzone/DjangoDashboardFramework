@@ -1,6 +1,6 @@
 """
 AI Relay Agent - AI Decision Making
-Supports Google Gemini (Direct) and OpenRouter (multi-model)
+Uses OpenRouter (multi-model, OpenAI-compatible API)
 """
 
 import os
@@ -16,21 +16,19 @@ QUOTA_COOLDOWN_HOURS = 1
 
 
 class GeminiRelayAgent:
-    """AI Agent supporting Google Gemini Direct and OpenRouter"""
+    """AI Agent using OpenRouter (OpenAI-compatible multi-model)"""
 
     def __init__(self):
         # Read from DB first, fallback to env
         try:
             from iot_dashboard.models import GeminiAISettings
             s = GeminiAISettings.get_settings()
-            self.provider        = s.provider        or 'openrouter'
-            self.api_key         = s.api_key         or os.getenv('GEMINI_API_KEY', '')
-            self.model_name      = s.model_name      or 'google/gemini-2.0-flash'
+            self.api_key         = s.api_key         or os.getenv('OPENROUTER_API_KEY', '')
+            self.model_name      = s.model_name      or 'google/gemini-2.0-flash-001'
             self.is_enabled      = s.is_enabled
         except Exception:
-            self.provider        = 'openrouter'
-            self.api_key         = os.getenv('GEMINI_API_KEY', '')
-            self.model_name      = 'google/gemini-2.0-flash'
+            self.api_key         = os.getenv('OPENROUTER_API_KEY', '')
+            self.model_name      = 'google/gemini-2.0-flash-001'
             self.is_enabled      = True
 
         self._quota_exhausted_until: Optional[datetime] = None
@@ -44,17 +42,12 @@ class GeminiRelayAgent:
             return
 
         try:
-            if self.provider == 'openrouter':
-                from openai import OpenAI
-                self.client = OpenAI(
-                    base_url='https://openrouter.ai/api/v1',
-                    api_key=self.api_key,
-                )
-                logger.info(f"✅ OpenRouter configured ({self.model_name})")
-            else:  # gemini direct
-                from google import genai
-                self.client = genai.Client(api_key=self.api_key)
-                logger.info(f"✅ Gemini Direct configured ({self.model_name})")
+            from openai import OpenAI
+            self.client = OpenAI(
+                base_url='https://openrouter.ai/api/v1',
+                api_key=self.api_key,
+            )
+            logger.info(f"✅ OpenRouter configured ({self.model_name})")
         except Exception as e:
             logger.error(f"❌ Error configuring AI client: {e}")
             self.client = None
@@ -71,20 +64,13 @@ class GeminiRelayAgent:
 
         try:
             prompt = self._create_prompt(weather_data)
-            logger.info(f"🤖 Asking AI ({self.provider}: {self.model_name})...")
+            logger.info(f"🤖 Asking AI (OpenRouter: {self.model_name})...")
 
-            if self.provider == 'openrouter':
-                response = self.client.chat.completions.create(
-                    model=self.model_name,
-                    messages=[{'role': 'user', 'content': prompt}],
-                )
-                text = response.choices[0].message.content or ''
-            else:  # gemini direct
-                response = self.client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt,
-                )
-                text = response.text or ''
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[{'role': 'user', 'content': prompt}],
+            )
+            text = response.choices[0].message.content or ''
 
             self._quota_exhausted_until = None
             decision, reasoning, confidence = self._parse_response(text)
