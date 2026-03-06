@@ -37,7 +37,7 @@ def dashboard_simple(request):
     
     # Get or create Relay controller
     relay_controller, created = Relay.objects.get_or_create(
-        name="ESP32 Relay Controller",
+        name="ESP32 OUTPUT STATUS",
         defaults={
             'relay1_status': False,
             'relay2_status': False,
@@ -128,7 +128,7 @@ def control_relay(request):
         action = request.POST.get('action')  # 'on', 'off', 'toggle'
         
         relay_controller, created = Relay.objects.get_or_create(
-            name="ESP32 Relay Controller",
+            name="ESP32 OUTPUT STATUS",
             defaults={
                 'relay1_status': False,
                 'relay2_status': False,
@@ -398,7 +398,7 @@ def api_relay_status(request):
     if request.method == 'GET':
         try:
             relay_controller, created = Relay.objects.get_or_create(
-                name="ESP32 Relay Controller",
+                name="ESP32 OUTPUT STATUS",
                 defaults={
                     'relay1_status': False,
                     'relay2_status': False,
@@ -444,7 +444,7 @@ def api_relay_status(request):
                 }, status=400)
             
             relay_controller, created = Relay.objects.get_or_create(
-                name="ESP32 Relay Controller",
+                name="ESP32 OUTPUT STATUS",
                 defaults={
                     'relay1_status': False,
                     'relay2_status': False,
@@ -800,7 +800,7 @@ def api_system_status(request):
         
         # Get Relay status
         relay_controller, _ = Relay.objects.get_or_create(
-            name="ESP32 Relay Controller",
+            name="ESP32 OUTPUT STATUS",
             defaults={
                 'relay1_status': False,
                 'relay2_status': False,
@@ -1160,7 +1160,7 @@ def api_threshold_reset(request):
         
         # Turn off Relay 1
         relay_controller, created = Relay.objects.get_or_create(
-            name="ESP32 Relay Controller",
+            name="ESP32 OUTPUT STATUS",
             defaults={
                 'relay1_status': False,
                 'relay2_status': False,

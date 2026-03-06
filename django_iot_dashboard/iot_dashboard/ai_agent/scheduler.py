@@ -25,8 +25,12 @@ class AIAgentScheduler:
         self.ai_agent = GeminiRelayAgent()
         self.is_running = False
         
-        # Get interval from environment or default to 15 minutes
-        self.interval_minutes = int(os.getenv('AI_AGENT_INTERVAL_MINUTES', '15'))
+        # Get interval from DB first, fallback to environment variable
+        try:
+            from iot_dashboard.models import GeminiAISettings
+            self.interval_minutes = GeminiAISettings.get_settings().interval_minutes
+        except Exception:
+            self.interval_minutes = int(os.getenv('AI_AGENT_INTERVAL_MINUTES', '15'))
     
     def start(self):
         """Start the scheduler"""

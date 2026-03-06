@@ -31,8 +31,8 @@ class Relay(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
     
     class Meta:
-        verbose_name = "Relay Controller"
-        verbose_name_plural = "Relay Controllers"
+        verbose_name = "Output Monitor"
+        verbose_name_plural = "Output Monitoring"
     
     def __str__(self):
         return f"{self.name} - R1:{'ON' if self.relay1_status else 'OFF'} R2:{'ON' if self.relay2_status else 'OFF'} R3:{'ON' if self.relay3_status else 'OFF'}"
@@ -93,6 +93,142 @@ class RelayLog(models.Model):
             source=source,
             reason=reason,
         )
+
+
+class RelaySettings(models.Model):
+    """การตั้งค่าชื่อ Output ของ ESP32 (singleton — มีแค่ 1 record)"""
+    relay1_name = models.CharField(max_length=50, default='RELAY 1', verbose_name='ชื่อ RELAY 1')
+    relay2_name = models.CharField(max_length=50, default='RELAY 2', verbose_name='ชื่อ RELAY 2')
+    relay3_name = models.CharField(max_length=50, default='RELAY 3', verbose_name='ชื่อ RELAY 3')
+    led_name    = models.CharField(max_length=50, default='Onboard LED', verbose_name='ชื่อ LED')
+
+    class Meta:
+        verbose_name = 'Output Settings'
+        verbose_name_plural = 'Output Settings'
+
+    def __str__(self):
+        return f'{self.relay1_name} / {self.relay2_name} / {self.relay3_name}'
+
+    def save(self, *args, **kwargs):
+        """Singleton: ไม่ให้สร้าง record ใหม่ถ้ามีอยู่แล้ว"""
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_settings(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class WeatherAPISettings(models.Model):
+    """การตั้งค่า OpenWeatherMap API (singleton — มีแค่ 1 record)"""
+    UNITS_CHOICES = [
+        ('metric',   'Metric (°C, m/s)'),
+        ('imperial', 'Imperial (°F, mph)'),
+    ]
+
+    api_key    = models.CharField(
+        max_length=100, blank=True, default='',
+        verbose_name='API Key',
+        help_text='OpenWeatherMap API Key — ดูได้จาก https://openweathermap.org/api'
+    )
+    location   = models.CharField(
+        max_length=100, default='Nakhon Si Thammarat,TH',
+        verbose_name='Location',
+        help_text='รูปแบบ: "ชื่อเมือง,รหัสประเทศ" เช่น Bangkok,TH หรือ London,GB'
+    )
+    units      = models.CharField(
+        max_length=10, choices=UNITS_CHOICES, default='metric',
+        verbose_name='หน่วย'
+    )
+    is_enabled = models.BooleanField(
+        default=True,
+        verbose_name='เปิดใช้งาน Weather API',
+        help_text='ปิดเพื่อหยุดดึงข้อมูลอากาศ (AI Agent จะทำงานโดยไม่ใช้ข้อมูลอากาศ)'
+    )
+    last_tested    = models.DateTimeField(null=True, blank=True, verbose_name='ทดสอบล่าสุด')
+    last_test_ok   = models.BooleanField(null=True, blank=True, verbose_name='ผลทดสอบล่าสุด')
+    last_test_msg  = models.CharField(max_length=200, blank=True, verbose_name='ข้อความผลทดสอบ')
+
+    class Meta:
+        verbose_name = 'Weather API Settings'
+        verbose_name_plural = 'Weather API Settings'
+
+    def __str__(self):
+        status = '✅ เปิด' if self.is_enabled else '❌ ปิด'
+        return f'OpenWeather: {self.location} [{status}]'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_settings(cls):
+        obj, _ = cls.objects.get_or_create(pk=1, defaults={
+            'api_key': '',
+            'location': 'Nakhon Si Thammarat,TH',
+        })
+        return obj
+
+    def masked_key(self):
+        """แสดง API key แบบ mask เพื่อความปลอดภัย"""
+        if not self.api_key:
+            return '(ยังไม่ได้ตั้งค่า)'
+        return self.api_key[:6] + '••••••••••••••••••••' + self.api_key[-4:]
+
+
+class GeminiAISettings(models.Model):
+    """การตั้งค่า Google Gemini AI (singleton — มีแค่ 1 record)"""
+
+    api_key = models.CharField(
+        max_length=200, blank=True, default='',
+        verbose_name='Gemini API Key',
+        help_text='Google Gemini API Key — ดูได้จาก https://makersuite.google.com/app/apikey'
+    )
+    model_name = models.CharField(
+        max_length=100, default='gemini-2.0-flash',
+        verbose_name='Model Name',
+        help_text='ชื่อ model เช่น gemini-2.0-flash, gemini-1.5-pro'
+    )
+    interval_minutes = models.PositiveIntegerField(
+        default=60,
+        verbose_name='รอบการวิเคราะห์ (นาที)',
+        help_text='AI Agent จะวิเคราะห์และตัดสินใจทุกกี่นาที (ค่าน้อย = บ่อยขึ้น = ใช้ quota เร็วขึ้น)'
+    )
+    is_enabled = models.BooleanField(
+        default=True,
+        verbose_name='เปิดใช้งาน AI Agent',
+        help_text='ปิดเพื่อหยุด AI Agent ไม่ให้ส่งคำสั่งควบคุม Relay'
+    )
+    last_tested   = models.DateTimeField(null=True, blank=True, verbose_name='ทดสอบล่าสุด')
+    last_test_ok  = models.BooleanField(null=True, blank=True, verbose_name='ผลทดสอบล่าสุด')
+    last_test_msg = models.CharField(max_length=500, blank=True, verbose_name='ข้อความผลทดสอบ')
+
+    class Meta:
+        verbose_name = 'Gemini AI Settings'
+        verbose_name_plural = 'Gemini AI Settings'
+
+    def __str__(self):
+        status = '✅ เปิด' if self.is_enabled else '❌ ปิด'
+        return f'Gemini AI: {self.model_name} | {self.interval_minutes} นาที [{status}]'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_settings(cls):
+        obj, _ = cls.objects.get_or_create(pk=1, defaults={
+            'api_key': '',
+            'model_name': 'gemini-2.0-flash',
+            'interval_minutes': 60,
+        })
+        return obj
+
+    def masked_key(self):
+        if not self.api_key:
+            return '(ยังไม่ได้ตั้งค่า)'
+        return self.api_key[:6] + '••••••••••••••••••••' + self.api_key[-4:]
 
 
 class SensorData(models.Model):

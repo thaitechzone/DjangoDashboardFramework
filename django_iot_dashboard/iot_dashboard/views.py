@@ -53,7 +53,7 @@ def dashboard_view(request):
     
     # Get or create Relay controller
     relay_controller, created = Relay.objects.get_or_create(
-        name="ESP32 Relay Controller",
+        name="ESP32 OUTPUT STATUS",
         defaults={
             'relay1_status': False,
             'relay2_status': False,
@@ -176,7 +176,7 @@ def control_relay(request):
         action = request.POST.get('action')  # 'on', 'off', 'toggle'
         
         relay_controller, created = Relay.objects.get_or_create(
-            name="ESP32 Relay Controller",
+            name="ESP32 OUTPUT STATUS",
             defaults={
                 'relay1_status': False,
                 'relay2_status': False,
@@ -320,7 +320,7 @@ def api_control_relay(request):
             action = data.get('action')  # 'on', 'off', 'toggle'
             
             relay_controller, created = Relay.objects.get_or_create(
-                name="ESP32 Relay Controller",
+                name="ESP32 OUTPUT STATUS",
                 defaults={
                     'relay1_status': False,
                     'relay2_status': False,

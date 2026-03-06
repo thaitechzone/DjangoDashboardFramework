@@ -580,11 +580,19 @@ def send_relay_command(relay_num, command, source='ai_agent', reason=''):
         if success:
             # บันทึก RelayLog
             try:
-                from .models import RelayLog
+                from .models import RelayLog, Relay
                 new_state = (command.upper() == 'ON')
+                # ดึง previous_state จาก DB (ยังไม่ถูก update ณ จุดนี้)
+                prev_state = None
+                try:
+                    rc = Relay.objects.get(name="ESP32 OUTPUT STATUS")
+                    prev_state = getattr(rc, f'relay{relay_num}_status', None)
+                except Relay.DoesNotExist:
+                    pass
                 RelayLog.record(
                     relay_number=relay_num,
                     new_state=new_state,
+                    previous_state=prev_state,
                     source=source,
                     reason=reason or f'Command: {command}',
                 )

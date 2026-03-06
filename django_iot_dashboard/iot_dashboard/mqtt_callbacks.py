@@ -38,7 +38,7 @@ def handle_relay_state_message(topic, message):
         
         # อัปเดต database
         relay_controller, created = Relay.objects.get_or_create(
-            name="ESP32 Relay Controller",
+            name="ESP32 OUTPUT STATUS",
             defaults={
                 'relay1_status': False,
                 'relay2_status': False,
@@ -60,20 +60,19 @@ def handle_relay_state_message(topic, message):
         relay_controller.last_updated = timezone.now()
         relay_controller.save()
 
-        # บันทึก RelayLog ทุกครั้ง (ทั้งเปลี่ยนและยืนยันสถานะเดิม)
-        RelayLog.record(
-            relay_number=relay_num,
-            new_state=new_state,
-            previous_state=old_state,
-            source='mqtt',
-            reason=f'ESP32 feedback: {message_upper}',
-        )
-
-        # แสดง log เฉพาะเมื่อสถานะเปลี่ยน
+        # บันทึก RelayLog เฉพาะเมื่อ ESP32 เปลี่ยนสถานะเอง (ไม่ใช่ confirmation)
+        # กรณีสั่งจาก Dashboard/AI/Threshold → DB ถูก update ก่อน feedback ถึง → old==new → ไม่ log ซ้ำ
         if old_state != new_state:
-            logger.info(f"✅ RELAY {relay_num} updated: {old_state} → {new_state}")
+            RelayLog.record(
+                relay_number=relay_num,
+                new_state=new_state,
+                previous_state=old_state,
+                source='mqtt',
+                reason=f'ESP32 state change: {"OFF" if old_state else "ON"} → {message_upper}',
+            )
+            logger.info(f"✅ RELAY {relay_num} changed by ESP32: {old_state} → {new_state}")
         else:
-            logger.debug(f"🔄 RELAY {relay_num} state confirmed: {new_state}")
+            logger.debug(f"🔄 RELAY {relay_num} state confirmed (no change): {new_state}")
         
     except Exception as e:
         logger.error(f"❌ Error handling relay state message: {e}")

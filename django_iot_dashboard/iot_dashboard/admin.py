@@ -6,7 +6,7 @@ admin.site.unregister(Group)
 from django.utils.html import format_html, mark_safe
 from django.utils import timezone
 from django.db.models import Avg, Count
-from .models import Device, SensorData, Relay, RelayLog, DeviceConfig, ThresholdSetting, AIDecisionLog
+from .models import Device, SensorData, Relay, RelayLog, RelaySettings, WeatherAPISettings, GeminiAISettings, DeviceConfig, ThresholdSetting, AIDecisionLog
 
 # ─────────────────────────────────────────────
 #  Admin Site Customization
@@ -100,58 +100,13 @@ class CustomUserAdmin(BaseUserAdmin):
 
 
 # ─────────────────────────────────────────────
-#  Device
+#  Device  (ซ่อนออกจาก sidebar — ข้อมูล LED แสดงใน RelayAdmin แทน)
 # ─────────────────────────────────────────────
 @admin.register(Device)
 class DeviceAdmin(admin.ModelAdmin):
-    list_display  = ('name', 'status_badge', 'last_updated_th', 'created_at_th')
-    list_display_links = ('name',)
-    list_filter   = ('is_on',)
-    search_fields = ('name',)
-    readonly_fields = ('created_at', 'last_updated')
-    list_per_page = 20
-    actions = ['turn_on_devices', 'turn_off_devices']
-
-    class Media:
-        css = {'all': ('iot_dashboard/admin_custom.css',)}
-
-    def status_badge(self, obj):
-        if obj.is_on:
-            return mark_safe(
-                '<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
-                'background:#d4edda;color:#155724;font-weight:bold;white-space:nowrap;">🟢 ON</span>'
-            )
-        return mark_safe(
-            '<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
-            'background:#e2e3e5;color:#495057;white-space:nowrap;">⚫ OFF</span>'
-        )
-    status_badge.short_description = 'สถานะ'
-
-    def last_updated_th(self, obj):
-        return format_html(
-            '<span style="white-space:nowrap;font-size:12px;color:#495057;">{}</span>',
-            timezone.localtime(obj.last_updated).strftime('%d/%m/%Y %H:%M')
-        )
-    last_updated_th.short_description = 'อัปเดตล่าสุด'
-    last_updated_th.admin_order_field = 'last_updated'
-
-    def created_at_th(self, obj):
-        return format_html(
-            '<span style="white-space:nowrap;font-size:12px;color:#6c757d;">{}</span>',
-            timezone.localtime(obj.created_at).strftime('%d/%m/%Y %H:%M')
-        )
-    created_at_th.short_description = 'สร้างเมื่อ'
-    created_at_th.admin_order_field = 'created_at'
-
-    @admin.action(description='🟢 เปิดอุปกรณ์ที่เลือก (Turn ON)')
-    def turn_on_devices(self, request, queryset):
-        updated = queryset.update(is_on=True, last_updated=timezone.now())
-        self.message_user(request, f"เปิด {updated} อุปกรณ์สำเร็จ")
-
-    @admin.action(description='⚫ ปิดอุปกรณ์ที่เลือก (Turn OFF)')
-    def turn_off_devices(self, request, queryset):
-        updated = queryset.update(is_on=False, last_updated=timezone.now())
-        self.message_user(request, f"ปิด {updated} อุปกรณ์สำเร็จ")
+    def get_model_perms(self, request):
+        """ซ่อน Device ออกจาก Admin sidebar ทั้งหมด"""
+        return {}
 
 
 # ─────────────────────────────────────────────
@@ -159,29 +114,23 @@ class DeviceAdmin(admin.ModelAdmin):
 # ─────────────────────────────────────────────
 @admin.register(Relay)
 class RelayAdmin(admin.ModelAdmin):
-    list_display  = ('name', 'relay_summary', 'relay1_badge', 'relay2_badge',
-                     'relay3_badge', 'last_updated_th', 'created_at_th')
-    list_display_links = ('name',)
+    list_display  = ('name', 'led_status_badge', 'relay1_badge', 'relay2_badge',
+                     'relay3_badge', 'relay_summary', 'last_updated_th')
+    list_display_links = None   # ไม่มีลิงก์เข้าแก้ไข — read-only
     list_filter   = ('relay1_status', 'relay2_status', 'relay3_status')
-    search_fields = ('name',)
-    readonly_fields = ('created_at', 'last_updated', 'relay_panel')
     list_per_page = 20
 
     class Media:
         css = {'all': ('iot_dashboard/admin_custom.css',)}
-    fieldsets = (
-        ('ข้อมูล Relay', {
-            'fields': ('name',)
-        }),
-        ('สถานะ Relay', {
-            'fields': ('relay_panel', 'relay1_status', 'relay2_status', 'relay3_status'),
-            'description': '✅ เปิด (True) = RELAY วงจรต่อ  |  ❌ ปิด (False) = RELAY วงจรตัด'
-        }),
-        ('Timestamps', {
-            'fields': ('last_updated', 'created_at'),
-            'classes': ('collapse',)
-        }),
-    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
     def _relay_pill(self, status, label):
         if status:
@@ -199,16 +148,36 @@ class RelayAdmin(admin.ModelAdmin):
         )
 
     def relay1_badge(self, obj):
-        return self._relay_pill(obj.relay1_status, 'RELAY 1')
+        name = RelaySettings.get_settings().relay1_name
+        return self._relay_pill(obj.relay1_status, name)
     relay1_badge.short_description = 'RELAY 1'
 
     def relay2_badge(self, obj):
-        return self._relay_pill(obj.relay2_status, 'RELAY 2')
+        name = RelaySettings.get_settings().relay2_name
+        return self._relay_pill(obj.relay2_status, name)
     relay2_badge.short_description = 'RELAY 2'
 
     def relay3_badge(self, obj):
-        return self._relay_pill(obj.relay3_status, 'RELAY 3')
+        name = RelaySettings.get_settings().relay3_name
+        return self._relay_pill(obj.relay3_status, name)
     relay3_badge.short_description = 'RELAY 3'
+
+    def led_status_badge(self, obj):
+        """ดึงสถานะ Onboard LED จาก Device model มาแสดงร่วมกัน"""
+        led_name = RelaySettings.get_settings().led_name
+        led = Device.objects.filter(name="Onboard LED").first()
+        if led and led.is_on:
+            return mark_safe(
+                f'<span style="display:inline-block;padding:3px 10px;border-radius:12px;'
+                f'background:#fff3cd;color:#856404;font-weight:bold;font-size:12px;'
+                f'white-space:nowrap;">🟡 {led_name}: ON</span>'
+            )
+        return mark_safe(
+            f'<span style="display:inline-block;padding:3px 10px;border-radius:12px;'
+            f'background:#e2e3e5;color:#495057;font-size:12px;white-space:nowrap;">'
+            f'⚫ {led_name}: OFF</span>'
+        )
+    led_status_badge.short_description = 'LED'
 
     def relay_summary(self, obj):
         on_count = sum([obj.relay1_status, obj.relay2_status, obj.relay3_status])
@@ -222,69 +191,15 @@ class RelayAdmin(admin.ModelAdmin):
             '<span style="font-weight:bold;color:{};">{}</span>',
             color, text
         )
-    relay_summary.short_description = 'สรุป'
-
-    def relay_panel(self, obj):
-        """แสดง visual panel ของ relay ทั้ง 3 ตัว (read-only ใน detail view)"""
-        relays = [
-            ('RELAY 1', obj.relay1_status),
-            ('RELAY 2', obj.relay2_status),
-            ('RELAY 3', obj.relay3_status),
-        ]
-        cells = mark_safe(''.join(
-            '<div style="display:inline-block;margin:4px 8px;text-align:center;">'
-            f'<div style="width:70px;padding:8px 4px;border-radius:8px;font-weight:bold;font-size:13px;'
-            f'background:{"#d4edda" if on else "#e2e3e5"};'
-            f'color:{"#155724" if on else "#495057"};">'
-            f'{"🟢" if on else "⚫"}</div>'
-            f'<div style="font-size:11px;margin-top:4px;color:#6c757d;">{label}</div>'
-            '</div>'
-            for label, on in relays
-        ))
-        return format_html('<div style="display:flex;gap:4px;padding:4px 0;">{}</div>', cells)
-    relay_panel.short_description = 'สถานะ Relay (ภาพรวม)'
+    relay_summary.short_description = 'สรุป Relay'
 
     def last_updated_th(self, obj):
         return format_html(
             '<span style="white-space:nowrap;font-size:12px;color:#495057;">{}</span>',
-            timezone.localtime(obj.last_updated).strftime('%d/%m/%Y %H:%M')
+            timezone.localtime(obj.last_updated).strftime('%d/%m/%Y %H:%M:%S')
         )
     last_updated_th.short_description = 'อัปเดตล่าสุด'
     last_updated_th.admin_order_field = 'last_updated'
-
-    def created_at_th(self, obj):
-        return format_html(
-            '<span style="white-space:nowrap;font-size:12px;color:#6c757d;">{}</span>',
-            timezone.localtime(obj.created_at).strftime('%d/%m/%Y %H:%M')
-        )
-    created_at_th.short_description = 'สร้างเมื่อ'
-    created_at_th.admin_order_field = 'created_at'
-
-    def save_model(self, request, obj, form, change):
-        """บันทึก RelayLog เมื่อมีการแก้ไขสถานะ relay ผ่าน Admin panel"""
-        if change:
-            try:
-                old = Relay.objects.get(pk=obj.pk)
-                relay_fields = [
-                    (1, 'relay1_status'),
-                    (2, 'relay2_status'),
-                    (3, 'relay3_status'),
-                ]
-                user_info = request.user.username if request.user.is_authenticated else 'admin'
-                for relay_num, field in relay_fields:
-                    old_val = getattr(old, field)
-                    new_val = getattr(obj, field)
-                    if old_val != new_val:
-                        RelayLog.record(
-                            relay_number=relay_num,
-                            new_state=new_val,
-                            previous_state=old_val,
-                            source='manual',
-                            reason=f'Admin panel edited by {user_info}'
-                        )
-            except Relay.DoesNotExist:
-                pass
-        super().save_model(request, obj, form, change)
 
 
 # ─────────────────────────────────────────────
@@ -560,11 +475,14 @@ class RelayLogAdmin(admin.ModelAdmin):
     def relay_badge(self, obj):
         colors = {1: '#007bff', 2: '#6f42c1', 3: '#fd7e14'}
         color = colors.get(obj.relay_number, '#6c757d')
+        s = RelaySettings.get_settings()
+        name_map = {1: s.relay1_name, 2: s.relay2_name, 3: s.relay3_name}
+        label = name_map.get(obj.relay_number, f'RELAY {obj.relay_number}')
         return format_html(
             '<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
             'background:{0}20;color:{0};font-weight:bold;white-space:nowrap;'
-            'font-size:12px;border:1px solid {0}40;">RELAY {1}</span>',
-            color, obj.relay_number
+            'font-size:12px;border:1px solid {0}40;">{1}</span>',
+            color, label
         )
     relay_badge.short_description = 'Relay'
     relay_badge.admin_order_field = 'relay_number'
@@ -685,6 +603,457 @@ class RelayLogAdmin(admin.ModelAdmin):
         response = HttpResponse(content, content_type='application/json; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="relay_log.json"'
         return response
+
+
+# ─────────────────────────────────────────────
+#  Output Settings (RelaySettings singleton)
+# ─────────────────────────────────────────────
+@admin.register(RelaySettings)
+class RelaySettingsAdmin(admin.ModelAdmin):
+    list_display  = ('relay1_name', 'relay2_name', 'relay3_name', 'led_name')
+    list_display_links = None  # ไม่ให้คลิกจาก list
+    list_per_page = 1
+
+    class Media:
+        css = {'all': ('iot_dashboard/admin_custom.css',)}
+
+    fieldsets = (
+        ('⚙️ ตั้งชื่อ Output (แสดงใน Admin)', {
+            'description': 'กำหนดชื่อที่ใช้แสดงแทน RELAY 1 / RELAY 2 / RELAY 3 และ LED ในทุกหน้า Admin',
+            'fields': ('relay1_name', 'relay2_name', 'relay3_name', 'led_name'),
+        }),
+    )
+
+    def has_add_permission(self, request):
+        """ไม่ให้เพิ่ม record ใหม่ (singleton)"""
+        return not RelaySettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        """ถ้ามี record อยู่แล้ว redirect ไปหน้า edit ตรงๆ"""
+        from django.shortcuts import redirect
+        obj = RelaySettings.get_settings()
+        return redirect(f'/admin/iot_dashboard/relaysettings/{obj.pk}/change/')
+
+
+# ─────────────────────────────────────────────
+#  Weather API Settings
+# ─────────────────────────────────────────────
+@admin.register(WeatherAPISettings)
+class WeatherAPISettingsAdmin(admin.ModelAdmin):
+    list_display = ('location_badge', 'key_masked_badge', 'units_badge',
+                    'enabled_badge', 'test_result_badge')
+    list_display_links = None
+    list_per_page = 1
+
+    class Media:
+        css = {'all': ('iot_dashboard/admin_custom.css',)}
+
+    readonly_fields = ('test_connect_button', 'test_result_panel')
+
+    fieldsets = (
+        ('🌤️ OpenWeatherMap API', {
+            'description': 'สมัครขอ API Key ได้ฟรีที่ <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a>',
+            'fields': ('api_key', 'location', 'units', 'is_enabled'),
+        }),
+        ('🧪 ผลทดสอบล่าสุด', {
+            'fields': ('test_connect_button', 'test_result_panel'),
+        }),
+    )
+
+    def has_add_permission(self, request):
+        return not WeatherAPISettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom = [
+            path('<int:pk>/run-test/',
+                 self.admin_site.admin_view(self._run_test),
+                 name='weatherapisettings_run_test'),
+        ]
+        return custom + urls
+
+    def changelist_view(self, request, extra_context=None):
+        from django.shortcuts import redirect
+        obj = WeatherAPISettings.get_settings()
+        return redirect(f'/admin/iot_dashboard/weatherapisettings/{obj.pk}/change/')
+
+    # ── Custom test URL view ──────────────────────
+    def _run_test(self, request, pk):
+        from django.shortcuts import redirect
+        import requests as req
+        obj = WeatherAPISettings.objects.get(pk=pk)
+        if not obj.api_key:
+            self.message_user(request, '⚠️ ยังไม่ได้ตั้งค่า API Key', level='WARNING')
+            return redirect(f'/admin/iot_dashboard/weatherapisettings/{pk}/change/')
+        try:
+            url = 'http://api.openweathermap.org/data/2.5/weather'
+            resp = req.get(url, params={'q': obj.location, 'appid': obj.api_key,
+                                        'units': obj.units}, timeout=8)
+            if resp.status_code == 200:
+                data    = resp.json()
+                city    = data.get('name', obj.location)
+                country = data.get('sys', {}).get('country', '')
+                temp    = data['main']['temp']
+                feels   = data['main']['feels_like']
+                humidity= data['main']['humidity']
+                pressure= data['main']['pressure']
+                desc    = data['weather'][0]['description'].capitalize()
+                wind    = data['wind']['speed']
+                clouds  = data['clouds']['all']
+                unit_sym   = '°C' if obj.units == 'metric' else '°F'
+                speed_unit = 'm/s' if obj.units == 'metric' else 'mph'
+                rows = [
+                    ('📍 เมือง',          f'{city}, {country}'),
+                    ('🌡️ อุณหภูมิ',       f'{temp}{unit_sym} (รู้สึก {feels}{unit_sym})'),
+                    ('💧 ความชื้น',        f'{humidity}%'),
+                    ('🌬️ ลม',             f'{wind} {speed_unit}'),
+                    ('☁️ เมฆ',            f'{clouds}%'),
+                    ('💨 สภาพอากาศ',      desc),
+                    ('🔍 ความดันอากาศ',   f'{pressure} hPa'),
+                ]
+                table_html = ''.join(
+                    f'<tr><td style="padding:3px 12px 3px 0;font-weight:bold;white-space:nowrap;">'
+                    f'{label}</td><td style="padding:3px 0;">{val}</td></tr>'
+                    for label, val in rows
+                )
+                obj.last_test_ok  = True
+                obj.last_test_msg = table_html
+                obj.last_tested   = timezone.now()
+                obj.save()
+                self.message_user(request, f'✅ เชื่อมต่อสำเร็จ — {city}: {temp}{unit_sym}, {desc}')
+            elif resp.status_code == 401:
+                obj.last_test_ok  = False
+                obj.last_test_msg = 'API Key ไม่ถูกต้อง (401 Unauthorized) — ตรวจสอบ key อีกครั้ง'
+                obj.last_tested   = timezone.now()
+                obj.save()
+                self.message_user(request, '❌ API Key ไม่ถูกต้อง', level='ERROR')
+            elif resp.status_code == 404:
+                obj.last_test_ok  = False
+                obj.last_test_msg = f'ไม่พบ Location "{obj.location}" (404) — ลองใช้รูปแบบ Bangkok,TH'
+                obj.last_tested   = timezone.now()
+                obj.save()
+                self.message_user(request, f'❌ ไม่พบ Location "{obj.location}"', level='ERROR')
+            else:
+                obj.last_test_ok  = False
+                obj.last_test_msg = f'HTTP Error {resp.status_code}'
+                obj.last_tested   = timezone.now()
+                obj.save()
+                self.message_user(request, f'❌ Error HTTP {resp.status_code}', level='ERROR')
+        except Exception as e:
+            obj.last_test_ok  = False
+            obj.last_test_msg = f'เชื่อมต่อไม่ได้: {str(e)[:150]}'
+            obj.last_tested   = timezone.now()
+            obj.save()
+            self.message_user(request, f'❌ เชื่อมต่อไม่ได้: {e}', level='ERROR')
+        return redirect(f'/admin/iot_dashboard/weatherapisettings/{pk}/change/')
+
+    # ── Test result panel (readonly, shown in change form) ──
+    def test_result_panel(self, obj):
+        if obj.last_test_ok is None:
+            return format_html(
+                '<div style="padding:12px 16px;background:#f8f9fa;border-radius:8px;'
+                'border:1px solid #dee2e6;color:#6c757d;">' 
+                '⏳ ยังไม่เคยทดสอบ — กด "🧪 Test Connection" จากเมนู Actions ด้านบนเพื่อตรวจสอบการเชื่อมต่อ</div>'
+            )
+        tested_str = timezone.localtime(obj.last_tested).strftime('%d/%m/%Y %H:%M:%S') if obj.last_tested else ''
+        if obj.last_test_ok:
+            return format_html(
+                '<div style="padding:12px 16px;background:#d4edda;border-radius:8px;'
+                'border:1px solid #c3e6cb;">'
+                '<div style="font-weight:bold;color:#155724;margin-bottom:8px;font-size:14px;">✅ เชื่อมต่อสำเร็จ</div>'
+                '<table style="font-size:13px;color:#155724;border-collapse:collapse;width:100%;">{}'
+                '</table>'
+                '<div style="font-size:11px;color:#6c757d;margin-top:8px;">ทดสอบเมื่อ: {}</div>'
+                '</div>',
+                mark_safe(obj.last_test_msg),
+                tested_str
+            )
+        return format_html(
+            '<div style="padding:12px 16px;background:#f8d7da;border-radius:8px;'
+            'border:1px solid #f5c6cb;">'
+            '<div style="font-weight:bold;color:#721c24;margin-bottom:6px;font-size:14px;">❌ เชื่อมต่อไม่สำเร็จ</div>'
+            '<div style="font-size:13px;color:#721c24;">{}</div>'
+            '<div style="font-size:11px;color:#6c757d;margin-top:8px;">ทดสอบเมื่อ: {}</div>'
+            '</div>',
+            obj.last_test_msg,
+            tested_str
+        )
+    test_result_panel.short_description = 'ผลทดสอบ'
+
+    def test_connect_button(self, obj):
+        if not obj or not obj.pk:
+            return '-'
+        return format_html(
+            '<a href="/admin/iot_dashboard/weatherapisettings/{}/run-test/" '
+            'class="button" '
+            'style="display:inline-block;padding:6px 16px;background:#17a2b8;color:#fff;'
+            'border-radius:4px;text-decoration:none;font-size:13px;font-weight:bold;">'
+            '🧪 Test Connection</a>',
+            obj.pk
+        )
+    test_connect_button.short_description = ''
+
+    # ── List badges ──────────────────────────────
+    def location_badge(self, obj):
+        return format_html(
+            '<span style="font-weight:bold;">📍 {}</span>', obj.location
+        )
+    location_badge.short_description = 'Location'
+
+    def key_masked_badge(self, obj):
+        if not obj.api_key:
+            return format_html(
+                '<span style="color:#dc3545;font-weight:bold;">⚠️ ยังไม่ได้ตั้งค่า</span>'
+            )
+        return format_html(
+            '<span style="font-family:monospace;font-size:12px;color:#495057;">{}</span>',
+            obj.masked_key()
+        )
+    key_masked_badge.short_description = 'API Key'
+
+    def units_badge(self, obj):
+        label = '🌡️ Metric (°C)' if obj.units == 'metric' else '🌡️ Imperial (°F)'
+        return format_html('<span style="font-size:12px;">{}</span>', label)
+    units_badge.short_description = 'หน่วย'
+
+    def enabled_badge(self, obj):
+        if obj.is_enabled:
+            return format_html(
+                '<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
+                'background:#d4edda;color:#155724;font-weight:bold;">✅ เปิดใช้งาน</span>'
+            )
+        return format_html(
+            '<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
+            'background:#f8d7da;color:#721c24;font-weight:bold;">❌ ปิดใช้งาน</span>'
+        )
+    enabled_badge.short_description = 'สถานะ'
+
+    def test_result_badge(self, obj):
+        if obj.last_test_ok is None:
+            return format_html('<span style="color:#6c757d;font-size:12px;">— ยังไม่เคยทดสอบ</span>')
+        if obj.last_test_ok:
+            return format_html(
+                '<span style="color:#155724;font-weight:bold;">✅ {}</span>',
+                timezone.localtime(obj.last_tested).strftime('%d/%m %H:%M') if obj.last_tested else ''
+            )
+        return format_html(
+            '<span style="color:#721c24;font-weight:bold;">❌ {}</span>',
+            obj.last_test_msg[:40] if obj.last_test_msg else 'failed'
+        )
+    test_result_badge.short_description = 'ผลทดสอบ'
+
+
+# ─────────────────────────────────────────────
+#  Gemini AI Settings
+# ─────────────────────────────────────────────
+@admin.register(GeminiAISettings)
+class GeminiAISettingsAdmin(admin.ModelAdmin):
+    list_display = ('model_badge', 'key_masked_badge', 'interval_badge', 'enabled_badge', 'test_result_badge')
+    list_display_links = None
+    list_per_page = 1
+
+    class Media:
+        css = {'all': ('iot_dashboard/admin_custom.css',)}
+
+    readonly_fields = ('test_connect_button', 'test_result_panel')
+
+    fieldsets = (
+        ('🤖 Google Gemini AI', {
+            'description': 'สร้าง API Key ได้ฟรีที่ <a href="https://makersuite.google.com/app/apikey" target="_blank">makersuite.google.com/app/apikey</a>',
+            'fields': ('api_key', 'model_name', 'interval_minutes', 'is_enabled'),
+        }),
+        ('🧪 ผลทดสอบล่าสุด', {
+            'fields': ('test_connect_button', 'test_result_panel'),
+        }),
+    )
+
+    def has_add_permission(self, request):
+        return not GeminiAISettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom = [
+            path('<int:pk>/run-test/',
+                 self.admin_site.admin_view(self._run_test),
+                 name='geminiaisettings_run_test'),
+        ]
+        return custom + urls
+
+    def changelist_view(self, request, extra_context=None):
+        from django.shortcuts import redirect
+        obj = GeminiAISettings.get_settings()
+        return redirect(f'/admin/iot_dashboard/geminiaisettings/{obj.pk}/change/')
+
+    # ── Custom test URL view ──────────────────────────────────────
+    def _run_test(self, request, pk):
+        from django.shortcuts import redirect
+        obj = GeminiAISettings.objects.get(pk=pk)
+        if not obj.api_key:
+            self.message_user(request, '⚠️ ยังไม่ได้ตั้งค่า API Key', level='WARNING')
+            return redirect(f'/admin/iot_dashboard/geminiaisettings/{pk}/change/')
+        try:
+            from google import genai
+            client = genai.Client(api_key=obj.api_key)
+            response = client.models.generate_content(
+                model=obj.model_name,
+                contents='Reply with exactly: OK'
+            )
+            reply = (response.text or '').strip()
+            obj.last_test_ok  = True
+            obj.last_test_msg = (
+                f'<tr><td style="padding:3px 12px 3px 0;font-weight:bold;">🤖 Model</td>'
+                f'<td style="padding:3px 0;">{obj.model_name}</td></tr>'
+                f'<tr><td style="padding:3px 12px 3px 0;font-weight:bold;">💬 ตอบกลับ</td>'
+                f'<td style="padding:3px 0;">{reply[:200]}</td></tr>'
+                f'<tr><td style="padding:3px 12px 3px 0;font-weight:bold;">⏱️ รอบวิเคราะห์</td>'
+                f'<td style="padding:3px 0;">ทุก {obj.interval_minutes} นาที</td></tr>'
+                f'<tr><td style="padding:3px 12px 3px 0;font-weight:bold;">🔑 API Key</td>'
+                f'<td style="padding:3px 0;">{obj.masked_key()}</td></tr>'
+            )
+            obj.last_tested = timezone.now()
+            obj.save()
+            self.message_user(request, f'✅ เชื่อมต่อสำเร็จ — {obj.model_name} ตอบกลับ: {reply[:60]}')
+        except Exception as e:
+            err = str(e)
+            obj.last_tested = timezone.now()
+            obj.last_test_ok = False
+            if '429' in err or 'RESOURCE_EXHAUSTED' in err:
+                obj.last_test_msg = (
+                    '⚠️ Quota เกินแล้ว (429 RESOURCE_EXHAUSTED)\n'
+                    'API Key ยังถูกต้อง แต่ใช้ quota ฟรีเกินกำหนด\n'
+                    'แนวทางแก้ไข: รอสักครู่แล้วลองใหม่ หรือตรวจสอบ quota ที่ '
+                    'https://aistudio.google.com/app/apikey'
+                )
+                msg = '⚠️ API Key ถูกต้อง แต่ quota เกิน (429) — รอสักครู่แล้วลองใหม่'
+                level = 'WARNING'
+            elif '401' in err or 'API_KEY_INVALID' in err:
+                obj.last_test_msg = 'API Key ไม่ถูกต้อง (401 Unauthorized) — ตรวจสอบ key อีกครั้ง'
+                msg = '❌ API Key ไม่ถูกต้อง (401)'
+                level = 'ERROR'
+            else:
+                obj.last_test_msg = f'เชื่อมต่อไม่ได้: {err[:200]}'
+                msg = f'❌ เชื่อมต่อไม่ได้: {err[:80]}'
+                level = 'ERROR'
+            obj.save()
+            self.message_user(request, msg, level=level)
+        return redirect(f'/admin/iot_dashboard/geminiaisettings/{pk}/change/')
+
+    # ── Test result panel ──────────────────────────────────────────
+    def test_result_panel(self, obj):
+        if obj.last_test_ok is None:
+            return format_html(
+                '<div style="padding:12px 16px;background:#f8f9fa;border-radius:8px;'
+                'border:1px solid #dee2e6;color:#6c757d;">'
+                '⏳ ยังไม่เคยทดสอบ — กดปุ่ม 🧪 Test Connection ด้านบนเพื่อตรวจสอบ</div>'
+            )
+        tested_str = timezone.localtime(obj.last_tested).strftime('%d/%m/%Y %H:%M:%S') if obj.last_tested else ''
+        if obj.last_test_ok:
+            return format_html(
+                '<div style="padding:12px 16px;background:#d4edda;border-radius:8px;'
+                'border:1px solid #c3e6cb;">'
+                '<div style="font-weight:bold;color:#155724;margin-bottom:8px;font-size:14px;">✅ เชื่อมต่อสำเร็จ</div>'
+                '<table style="font-size:13px;color:#155724;border-collapse:collapse;width:100%;">{}</table>'
+                '<div style="font-size:11px;color:#6c757d;margin-top:8px;">ทดสอบเมื่อ: {}</div>'
+                '</div>',
+                mark_safe(obj.last_test_msg),
+                tested_str
+            )
+        # quota exceeded → yellow warning card
+        is_quota = '429' in (obj.last_test_msg or '') or 'Quota' in (obj.last_test_msg or '')
+        if is_quota:
+            return format_html(
+                '<div style="padding:12px 16px;background:#fff3cd;border-radius:8px;'
+                'border:1px solid #ffc107;">'
+                '<div style="font-weight:bold;color:#856404;margin-bottom:6px;font-size:14px;">⚠️ Quota เกิน — API Key ถูกต้อง</div>'
+                '<div style="font-size:13px;color:#856404;white-space:pre-line;">{}</div>'
+                '<div style="font-size:11px;color:#6c757d;margin-top:8px;">ทดสอบเมื่อ: {}</div>'
+                '</div>',
+                obj.last_test_msg,
+                tested_str
+            )
+        return format_html(
+            '<div style="padding:12px 16px;background:#f8d7da;border-radius:8px;'
+            'border:1px solid #f5c6cb;">'
+            '<div style="font-weight:bold;color:#721c24;margin-bottom:6px;font-size:14px;">❌ เชื่อมต่อไม่สำเร็จ</div>'
+            '<div style="font-size:13px;color:#721c24;white-space:pre-line;">{}</div>'
+            '<div style="font-size:11px;color:#6c757d;margin-top:8px;">ทดสอบเมื่อ: {}</div>'
+            '</div>',
+            obj.last_test_msg,
+            tested_str
+        )
+    test_result_panel.short_description = 'ผลทดสอบ'
+
+    def test_connect_button(self, obj):
+        if not obj or not obj.pk:
+            return '-'
+        return format_html(
+            '<a href="/admin/iot_dashboard/geminiaisettings/{}/run-test/" '
+            'class="button" '
+            'style="display:inline-block;padding:6px 16px;background:#6610f2;color:#fff;'
+            'border-radius:4px;text-decoration:none;font-size:13px;font-weight:bold;">'
+            '🧪 Test Connection</a>',
+            obj.pk
+        )
+    test_connect_button.short_description = ''
+
+    # ── List badges ──────────────────────────────────────────────
+    def model_badge(self, obj):
+        return format_html('<span style="font-weight:bold;">🤖 {}</span>', obj.model_name)
+    model_badge.short_description = 'Model'
+
+    def key_masked_badge(self, obj):
+        if not obj.api_key:
+            return format_html('<span style="color:#dc3545;font-weight:bold;">⚠️ ยังไม่ได้ตั้งค่า</span>')
+        return format_html(
+            '<span style="font-family:monospace;font-size:12px;color:#495057;">{}</span>',
+            obj.masked_key()
+        )
+    key_masked_badge.short_description = 'API Key'
+
+    def interval_badge(self, obj):
+        return format_html(
+            '<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
+            'background:#e2d9f3;color:#4a235a;font-weight:bold;">⏱️ {} นาที</span>',
+            obj.interval_minutes
+        )
+    interval_badge.short_description = 'รอบวิเคราะห์'
+
+    def enabled_badge(self, obj):
+        if obj.is_enabled:
+            return format_html(
+                '<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
+                'background:#d4edda;color:#155724;font-weight:bold;">✅ เปิดใช้งาน</span>'
+            )
+        return format_html(
+            '<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
+            'background:#f8d7da;color:#721c24;font-weight:bold;">❌ ปิดใช้งาน</span>'
+        )
+    enabled_badge.short_description = 'สถานะ'
+
+    def test_result_badge(self, obj):
+        if obj.last_test_ok is None:
+            return format_html('<span style="color:#6c757d;font-size:12px;">— ยังไม่เคยทดสอบ</span>')
+        if obj.last_test_ok:
+            return format_html(
+                '<span style="color:#155724;font-weight:bold;">✅ {}</span>',
+                timezone.localtime(obj.last_tested).strftime('%d/%m %H:%M') if obj.last_tested else ''
+            )
+        return format_html(
+            '<span style="color:#721c24;font-weight:bold;">❌ {}</span>',
+            obj.last_test_msg[:40] if obj.last_test_msg else 'failed'
+        )
+    test_result_badge.short_description = 'ผลทดสอบ'
 
 
 # ─────────────────────────────────────────────

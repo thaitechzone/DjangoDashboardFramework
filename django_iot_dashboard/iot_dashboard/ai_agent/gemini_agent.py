@@ -20,16 +20,29 @@ class GeminiRelayAgent:
     """AI Agent using Google Gemini for intelligent relay control"""
     
     def __init__(self):
-        self.api_key = os.getenv('GEMINI_API_KEY')
+        # Read from DB first, fallback to env
+        try:
+            from iot_dashboard.models import GeminiAISettings
+            settings = GeminiAISettings.get_settings()
+            self.api_key   = settings.api_key or os.getenv('GEMINI_API_KEY')
+            self.model_name = settings.model_name or 'gemini-2.0-flash'
+            self.is_enabled = settings.is_enabled
+        except Exception:
+            self.api_key    = os.getenv('GEMINI_API_KEY')
+            self.model_name = 'gemini-2.0-flash'
+            self.is_enabled = True
+
         self._quota_exhausted_until: Optional[datetime] = None  # cooldown tracker
-        
-        if not self.api_key:
+
+        if not self.is_enabled:
+            logger.info("ℹ️ Gemini AI Agent ถูกปิดใช้งานจากการตั้งค่า")
+            self.client = None
+        elif not self.api_key:
             logger.warning("⚠️ GEMINI_API_KEY not found in environment variables")
             self.client = None
         else:
             try:
                 self.client = genai.Client(api_key=self.api_key)
-                self.model_name = 'gemini-2.0-flash'
                 logger.info(f"✅ Gemini AI configured successfully ({self.model_name})")
             except Exception as e:
                 logger.error(f"❌ Error configuring Gemini AI: {e}")

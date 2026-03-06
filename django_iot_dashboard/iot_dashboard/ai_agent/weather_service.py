@@ -14,13 +14,25 @@ class WeatherService:
     """Service for fetching weather data from OpenWeatherMap API"""
     
     def __init__(self):
-        self.api_key = os.getenv('OPENWEATHER_API_KEY')
-        self.location = os.getenv('WEATHER_LOCATION', 'Nakhon Si Thammarat,TH')
+        # อ่านจาก DB (WeatherAPISettings) ก่อน แล้ว fallback ที่ env var
+        try:
+            from iot_dashboard.models import WeatherAPISettings
+            db_cfg = WeatherAPISettings.get_settings()
+            self.api_key  = db_cfg.api_key or os.getenv('OPENWEATHER_API_KEY', '')
+            self.location = db_cfg.location or os.getenv('WEATHER_LOCATION', 'Nakhon Si Thammarat,TH')
+            self.units    = db_cfg.units or 'metric'
+            self.is_enabled = db_cfg.is_enabled
+        except Exception:
+            self.api_key  = os.getenv('OPENWEATHER_API_KEY', '')
+            self.location = os.getenv('WEATHER_LOCATION', 'Nakhon Si Thammarat,TH')
+            self.units    = 'metric'
+            self.is_enabled = True
+
         self.base_url = 'http://api.openweathermap.org/data/2.5/weather'
         self.air_pollution_url = 'http://api.openweathermap.org/data/2.5/air_pollution'
         
         if not self.api_key:
-            logger.warning("⚠️ OPENWEATHER_API_KEY not found in environment variables")
+            logger.warning("⚠️ OPENWEATHER_API_KEY not configured (DB or env)")
     
     def get_current_weather(self) -> Optional[Dict]:
         """
@@ -33,11 +45,15 @@ class WeatherService:
             logger.error("❌ Cannot fetch weather: API key not configured")
             return None
         
+        if not self.is_enabled:
+            logger.info("⏸️ Weather API disabled in settings")
+            return None
+        
         try:
             params = {
                 'q': self.location,
                 'appid': self.api_key,
-                'units': 'metric'  # Celsius
+                'units': self.units
             }
             
             logger.info(f"🌤️ Fetching weather for {self.location}...")
