@@ -53,10 +53,15 @@ def dashboard_simple(request):
 
     # Get Device Config
     device_config = DeviceConfig.get_config()
-    
+
+    # Get Relay names from settings
+    from .models import RelaySettings
+    relay_settings = RelaySettings.get_settings()
+
     context = {
         'led': led_device,
         'relay': relay_controller,
+        'relay_settings': relay_settings,
         'latest_sensor': latest_sensor,
         'recent_sensors': recent_sensors,
         'current_time': timezone.now(),
@@ -69,9 +74,12 @@ def dashboard_simple(request):
 
 def ai_dashboard(request):
     """AI Agent Dashboard - แสดงผลการวิเคราะห์และการตัดสินใจของ AI Agent"""
-    
+    from .models import RelaySettings
+    relay_settings = RelaySettings.get_settings()
+
     context = {
         'current_time': timezone.now(),
+        'relay_settings': relay_settings,
     }
     
     return render(request, 'iot_dashboard/ai_dashboard.html', context)
@@ -406,6 +414,9 @@ def api_relay_status(request):
                 }
             )
             
+            from .models import RelaySettings
+            rs = RelaySettings.get_settings()
+
             return JsonResponse({
                 'success': True,
                 'data': {
@@ -414,6 +425,10 @@ def api_relay_status(request):
                     'relay1': relay_controller.relay1_status,
                     'relay2': relay_controller.relay2_status,
                     'relay3': relay_controller.relay3_status,
+                    'relay1_name': rs.relay1_name,
+                    'relay2_name': rs.relay2_name,
+                    'relay3_name': rs.relay3_name,
+                    'led_name': rs.led_name,
                     'last_updated': relay_controller.last_updated.strftime('%Y-%m-%d %H:%M:%S') if relay_controller.last_updated else None
                 }
             })
@@ -1275,13 +1290,27 @@ def api_ai_status(request):
                 'timestamp': format_datetime_local(latest.timestamp)
             }
         
+        # Get AI settings (provider / model)
+        try:
+            from .models import GeminiAISettings
+            ai_cfg = GeminiAISettings.get_settings()
+            ai_settings = {
+                'provider': 'OpenRouter',
+                'model_name': ai_cfg.model_name,
+                'is_enabled': ai_cfg.is_enabled,
+                'interval_minutes': ai_cfg.interval_minutes,
+            }
+        except Exception:
+            ai_settings = {'provider': 'OpenRouter', 'model_name': '-', 'is_enabled': False, 'interval_minutes': '-'}
+
         return JsonResponse({
             'success': True,
             'data': {
                 'scheduler': scheduler_status,
                 'recent_decisions': decisions_data,
                 'latest_decision': latest_decision,
-                'relay2_current_status': current_relay2_status  # เพิ่มสถานะจริงของ Relay 2
+                'relay2_current_status': current_relay2_status,
+                'ai_settings': ai_settings,
             }
         })
         

@@ -526,10 +526,21 @@
                     Checking status...
                 </div>
             </div>
+
+            <!-- AI Provider Info -->
+            <div class="status-card">
+                <h3>🟢 AI Provider</h3>
+                <div class="status-value" style="font-size:18px;color:#28a745;" id="ai-provider-name">
+                    ⏳ Loading...
+                </div>
+                <div class="status-info" id="ai-model-name" style="font-family:monospace;word-break:break-all;">
+                    ...
+                </div>
+            </div>
             
             <!-- Relay 2 Status -->
             <div class="status-card">
-                <h3>⚡ Relay 2 Status</h3>
+                <h3>⚡ {{ relay_settings.relay2_name }} Status</h3>
                 <div class="status-value status-relay-off" id="relay-status">
                     ⏳ Loading...
                 </div>
@@ -613,7 +624,7 @@
             <h2>🧠 AI Decision Rules</h2>
             <div class="rules-container">
                 <div class="rule-section">
-                    <h3>🟢 Turn ON Relay 2 When:</h3>
+                    <h3>🟢 Turn ON {{ relay_settings.relay2_name }} When:</h3>
                     <ul>
                         <li>🔥 Temperature <strong>> 32°C</strong> <strong>AND</strong> Humidity <strong>< 50%</strong> (Hot & dry - needs ventilation)</li>
                         <li>🌡️ Temperature <strong>> 32°C</strong> <strong>AND</strong> Humidity <strong>> 70%</strong> (Hot & humid - needs cooling)</li>
@@ -623,7 +634,7 @@
                 </div>
                 
                 <div class="rule-section">
-                    <h3>⚫ Turn OFF Relay 2 When:</h3>
+                    <h3>⚫ Turn OFF {{ relay_settings.relay2_name }} When:</h3>
                     <ul>
                         <li>❄️ Temperature <strong>< 30°C</strong> <strong>AND</strong> Humidity <strong>> 60%</strong> (Cool & humid - save energy)</li>
                         <li>🌧️ Rain probability <strong>> 60%</strong> (High rain - protect equipment)</li>
@@ -643,7 +654,7 @@
                 </div>
             </div>
             <div class="rules-note">
-                <strong>ℹ️ Note:</strong> AI uses Google Gemini to analyze these conditions and may make contextual decisions beyond simple rules.
+                <strong>ℹ️ Note:</strong> AI uses <span id="ai-note-provider">OpenRouter</span> (<span id="ai-note-model" style="font-family:monospace;">...</span>) to analyze these conditions and may make contextual decisions beyond simple rules.
             </div>
         </div>
 
@@ -810,6 +821,19 @@
                         statusEl.textContent = '❌ INACTIVE';
                         statusEl.className = 'status-value status-ai-inactive';
                         infoEl.textContent = 'AI Agent is not running';
+                    }
+
+                    // Update AI Provider card
+                    if (data.ai_settings) {
+                        const s = data.ai_settings;
+                        const providerEl = document.getElementById('ai-provider-name');
+                        const modelEl   = document.getElementById('ai-model-name');
+                        const noteProvider = document.getElementById('ai-note-provider');
+                        const noteModel    = document.getElementById('ai-note-model');
+                        if (providerEl) providerEl.textContent = s.is_enabled ? `🟢 ${s.provider}` : `⚫ ${s.provider} (disabled)`;
+                        if (modelEl)    modelEl.textContent    = s.model_name;
+                        if (noteProvider) noteProvider.textContent = s.provider;
+                        if (noteModel)    noteModel.textContent    = s.model_name;
                     }
                     
                     // Update Last Decision

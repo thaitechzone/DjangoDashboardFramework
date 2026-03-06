@@ -718,7 +718,7 @@
                     <!-- RELAY 1 -->
                     <div class="relay-item-horizontal">
                         <div class="relay-header-horizontal">
-                            <span style="font-weight: bold; font-size: 16px;">🔌 RELAY 1</span>
+                            <span style="font-weight: bold; font-size: 16px;">🔌 {{ relay_settings.relay1_name }}</span>
                             <span class="status-indicator {% if relay.relay1_status %}status-on{% else %}status-off{% endif %}" style="font-size: 14px;">
                                 {% if relay.relay1_status %}🟢 ON{% else %}⚫ OFF{% endif %}
                             </span>
@@ -751,7 +751,7 @@
                     <!-- RELAY 2 -->
                     <div class="relay-item-horizontal">
                         <div class="relay-header-horizontal">
-                            <span style="font-weight: bold; font-size: 16px;">🔌 RELAY 2</span>
+                            <span style="font-weight: bold; font-size: 16px;">🔌 {{ relay_settings.relay2_name }}</span>
                             <span class="status-indicator {% if relay.relay2_status %}status-on{% else %}status-off{% endif %}" style="font-size: 14px;">
                                 {% if relay.relay2_status %}🟢 ON{% else %}⚫ OFF{% endif %}
                             </span>
@@ -784,7 +784,7 @@
                     <!-- RELAY 3 -->
                     <div class="relay-item-horizontal">
                         <div class="relay-header-horizontal">
-                            <span style="font-weight: bold; font-size: 16px;">🔌 RELAY 3</span>
+                            <span style="font-weight: bold; font-size: 16px;">🔌 {{ relay_settings.relay3_name }}</span>
                             <span class="status-indicator {% if relay.relay3_status %}status-on{% else %}status-off{% endif %}" style="font-size: 14px;">
                                 {% if relay.relay3_status %}🟢 ON{% else %}⚫ OFF{% endif %}
                             </span>
