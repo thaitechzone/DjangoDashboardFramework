@@ -855,19 +855,22 @@ class WeatherAPISettingsAdmin(admin.ModelAdmin):
 # ─────────────────────────────────────────────
 @admin.register(GeminiAISettings)
 class GeminiAISettingsAdmin(admin.ModelAdmin):
-    list_display = ('model_badge', 'key_masked_badge', 'interval_badge', 'enabled_badge', 'test_result_badge')
+    list_display = ('provider_badge', 'model_badge', 'key_masked_badge', 'interval_badge', 'enabled_badge', 'test_result_badge')
     list_display_links = None
     list_per_page = 1
 
     class Media:
         css = {'all': ('iot_dashboard/admin_custom.css',)}
 
-    readonly_fields = ('test_connect_button', 'test_result_panel')
+    readonly_fields = ('test_connect_button', 'test_result_panel', 'model_presets_panel')
 
     fieldsets = (
-        ('🤖 Google Gemini AI', {
-            'description': 'สร้าง API Key ได้ฟรีที่ <a href="https://makersuite.google.com/app/apikey" target="_blank">makersuite.google.com/app/apikey</a>',
-            'fields': ('api_key', 'model_name', 'interval_minutes', 'is_enabled'),
+        ('🤖 AI Provider Settings', {
+            'description':
+                '🟢 <b>OpenRouter</b>: สมัครและเติมเงินที่ <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a> '
+                '— เลือก model ได้จาก <a href="https://openrouter.ai/models" target="_blank">openrouter.ai/models</a><br>'
+                '🔵 <b>Gemini Direct</b>: สร้าง key ที่ <a href="https://makersuite.google.com/app/apikey" target="_blank">makersuite.google.com/app/apikey</a>',
+            'fields': ('provider', 'api_key', 'model_name', 'model_presets_panel', 'interval_minutes', 'is_enabled'),
         }),
         ('🧪 ผลทดสอบล่าสุด', {
             'fields': ('test_connect_button', 'test_result_panel'),
@@ -899,45 +902,64 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
     def _run_test(self, request, pk):
         from django.shortcuts import redirect
         obj = GeminiAISettings.objects.get(pk=pk)
+        redirect_url = f'/admin/iot_dashboard/geminiaisettings/{pk}/change/'
         if not obj.api_key:
             self.message_user(request, '⚠️ ยังไม่ได้ตั้งค่า API Key', level='WARNING')
-            return redirect(f'/admin/iot_dashboard/geminiaisettings/{pk}/change/')
+            return redirect(redirect_url)
         try:
-            from google import genai
-            client = genai.Client(api_key=obj.api_key)
-            response = client.models.generate_content(
-                model=obj.model_name,
-                contents='Reply with exactly: OK'
-            )
-            reply = (response.text or '').strip()
-            obj.last_test_ok  = True
+            if obj.provider == 'openrouter':
+                from openai import OpenAI
+                client = OpenAI(base_url='https://openrouter.ai/api/v1', api_key=obj.api_key)
+                response = client.chat.completions.create(
+                    model=obj.model_name,
+                    messages=[{'role': 'user', 'content': 'Reply with exactly: OK'}],
+                )
+                reply = (response.choices[0].message.content or '').strip()
+                provider_name = 'OpenRouter'
+            else:
+                from google import genai
+                client = genai.Client(api_key=obj.api_key)
+                response = client.models.generate_content(
+                    model=obj.model_name,
+                    contents='Reply with exactly: OK'
+                )
+                reply = (response.text or '').strip()
+                provider_name = 'Gemini Direct'
+
+            obj.last_test_ok = True
             obj.last_test_msg = (
+                f'<tr><td style="padding:3px 12px 3px 0;font-weight:bold;">🟢 Provider</td>'
+                f'<td style="padding:3px 0;">{provider_name}</td></tr>'
                 f'<tr><td style="padding:3px 12px 3px 0;font-weight:bold;">🤖 Model</td>'
-                f'<td style="padding:3px 0;">{obj.model_name}</td></tr>'
+                f'<td style="padding:3px 0;font-family:monospace;">{obj.model_name}</td></tr>'
                 f'<tr><td style="padding:3px 12px 3px 0;font-weight:bold;">💬 ตอบกลับ</td>'
                 f'<td style="padding:3px 0;">{reply[:200]}</td></tr>'
                 f'<tr><td style="padding:3px 12px 3px 0;font-weight:bold;">⏱️ รอบวิเคราะห์</td>'
                 f'<td style="padding:3px 0;">ทุก {obj.interval_minutes} นาที</td></tr>'
                 f'<tr><td style="padding:3px 12px 3px 0;font-weight:bold;">🔑 API Key</td>'
-                f'<td style="padding:3px 0;">{obj.masked_key()}</td></tr>'
+                f'<td style="padding:3px 0;font-family:monospace;">{obj.masked_key()}</td></tr>'
             )
             obj.last_tested = timezone.now()
             obj.save()
-            self.message_user(request, f'✅ เชื่อมต่อสำเร็จ — {obj.model_name} ตอบกลับ: {reply[:60]}')
+            self.message_user(request, f'✅ เชื่อมต่อสำเร็จ ({provider_name}) — {obj.model_name} ตอบกลับ: {reply[:60]}')
         except Exception as e:
             err = str(e)
             obj.last_tested = timezone.now()
             obj.last_test_ok = False
-            if '429' in err or 'RESOURCE_EXHAUSTED' in err:
+            if '429' in err or 'RESOURCE_EXHAUSTED' in err or 'rate_limit' in err.lower():
+                quota_link = (
+                    'https://openrouter.ai/settings/limits'
+                    if obj.provider == 'openrouter'
+                    else 'https://aistudio.google.com/app/apikey'
+                )
                 obj.last_test_msg = (
-                    '⚠️ Quota เกินแล้ว (429 RESOURCE_EXHAUSTED)\n'
-                    'API Key ยังถูกต้อง แต่ใช้ quota ฟรีเกินกำหนด\n'
-                    'แนวทางแก้ไข: รอสักครู่แล้วลองใหม่ หรือตรวจสอบ quota ที่ '
-                    'https://aistudio.google.com/app/apikey'
+                    '⚠️ Quota เกินแล้ว (429 Rate Limit)\n'
+                    'API Key ยังถูกต้อง แต่ใช้ quota เกินกำหนด\n'
+                    f'แนวทางแก้ไข: รอสักครู่แล้วลองใหม่ หรือตรวจสอบ quota ที่ {quota_link}'
                 )
                 msg = '⚠️ API Key ถูกต้อง แต่ quota เกิน (429) — รอสักครู่แล้วลองใหม่'
                 level = 'WARNING'
-            elif '401' in err or 'API_KEY_INVALID' in err:
+            elif '401' in err or 'API_KEY_INVALID' in err or 'invalid_api_key' in err.lower():
                 obj.last_test_msg = 'API Key ไม่ถูกต้อง (401 Unauthorized) — ตรวจสอบ key อีกครั้ง'
                 msg = '❌ API Key ไม่ถูกต้อง (401)'
                 level = 'ERROR'
@@ -947,7 +969,7 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
                 level = 'ERROR'
             obj.save()
             self.message_user(request, msg, level=level)
-        return redirect(f'/admin/iot_dashboard/geminiaisettings/{pk}/change/')
+        return redirect(redirect_url)
 
     # ── Test result panel ──────────────────────────────────────────
     def test_result_panel(self, obj):
@@ -1007,9 +1029,76 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
         )
     test_connect_button.short_description = ''
 
+    # ── Model Presets Panel ──────────────────────────────────────
+    def model_presets_panel(self, obj):
+        OPENROUTER_MODELS = [
+            ('🆓 Free', [
+                ('google/gemini-2.0-flash:free',      'Gemini 2.0 Flash (Free)'),
+                ('google/gemini-2.5-pro:free',        'Gemini 2.5 Pro (Free)'),
+                ('meta-llama/llama-3.3-70b-instruct:free', 'Llama 3.3 70B (Free)'),
+                ('deepseek/deepseek-chat:free',       'DeepSeek Chat (Free)'),
+                ('mistralai/mistral-7b-instruct:free','Mistral 7B (Free)'),
+            ]),
+            ('💎 Paid', [
+                ('google/gemini-2.0-flash',           'Gemini 2.0 Flash'),
+                ('google/gemini-2.5-pro',             'Gemini 2.5 Pro'),
+                ('anthropic/claude-3.5-sonnet',       'Claude 3.5 Sonnet'),
+                ('anthropic/claude-3-haiku',          'Claude 3 Haiku'),
+                ('openai/gpt-4o-mini',                'GPT-4o Mini'),
+                ('openai/gpt-4o',                     'GPT-4o'),
+                ('meta-llama/llama-3.1-405b-instruct','Llama 3.1 405B'),
+            ]),
+        ]
+        GEMINI_MODELS = [
+            ('🔵 Gemini Direct', [
+                ('gemini-2.0-flash',      'Gemini 2.0 Flash'),
+                ('gemini-2.5-pro',        'Gemini 2.5 Pro'),
+                ('gemini-1.5-flash',      'Gemini 1.5 Flash'),
+                ('gemini-1.5-pro',        'Gemini 1.5 Pro'),
+            ]),
+        ]
+        model_groups = GEMINI_MODELS if (obj and obj.provider == 'gemini') else OPENROUTER_MODELS
+        chips_html = ''
+        for group_label, models in model_groups:
+            chips_html += (
+                f'<div style="margin-bottom:6px;">'
+                f'<span style="font-size:11px;color:#6c757d;font-weight:bold;margin-right:6px;">{group_label}</span>'
+            )
+            for model_id, model_label in models:
+                chips_html += (
+                    f'<button type="button" '
+                    f'onclick="document.getElementById(\'id_model_name\').value=\'{model_id}\';this.closest(\'div.field-model_presets_panel\').querySelectorAll(\'button\').forEach(b=>b.style.background=\'#f8f9fa\');this.style.background=\'#d1e7dd\';" '
+                    f'style="margin:2px 4px 2px 0;padding:3px 10px;border:1px solid #ced4da;border-radius:14px;'
+                    f'background:#f8f9fa;color:#212529;font-size:12px;cursor:pointer;font-family:monospace;">{model_label}</button>'
+                )
+            chips_html += '</div>'
+        return format_html(
+            '<div style="padding:10px 14px;background:#f8f9fa;border-radius:8px;border:1px solid #dee2e6;">'
+            '<div style="font-size:11px;color:#6c757d;margin-bottom:8px;">'
+            '💡 คลิกชื่อ model เพื่อเลือก (หรือพิมพ์ชื่อ model ใน Model Name ด้านบนโดยตรง)</div>'
+            '{}</div>',
+            mark_safe(chips_html)
+        )
+    model_presets_panel.short_description = 'เลือก Model สำเร็จรูป'
+
     # ── List badges ──────────────────────────────────────────────
+    def provider_badge(self, obj):
+        if obj.provider == 'openrouter':
+            return format_html(
+                '<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
+                'background:#d1e7dd;color:#0a3622;font-weight:bold;">🟢 OpenRouter</span>'
+            )
+        return format_html(
+            '<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
+            'background:#cfe2ff;color:#084298;font-weight:bold;">🔵 Gemini Direct</span>'
+        )
+    provider_badge.short_description = 'Provider'
+
     def model_badge(self, obj):
-        return format_html('<span style="font-weight:bold;">🤖 {}</span>', obj.model_name)
+        return format_html(
+            '<span style="font-family:monospace;font-size:12px;font-weight:bold;">{}</span>',
+            obj.model_name
+        )
     model_badge.short_description = 'Model'
 
     def key_masked_badge(self, obj):

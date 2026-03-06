@@ -178,22 +178,35 @@ class WeatherAPISettings(models.Model):
 
 
 class GeminiAISettings(models.Model):
-    """การตั้งค่า Google Gemini AI (singleton — มีแค่ 1 record)"""
+    """การตั้งค่า AI Agent (singleton — มีแค่ 1 record)"""
 
+    PROVIDER_CHOICES = [
+        ('gemini',      '🔵 Google Gemini (Direct)'),
+        ('openrouter',  '🟢 OpenRouter (Multi-model)'),
+    ]
+
+    provider = models.CharField(
+        max_length=20, choices=PROVIDER_CHOICES, default='openrouter',
+        verbose_name='AI Provider',
+        help_text='Gemini Direct = ใช้ Google SDK โดยตรง | OpenRouter = OpenAI-compatible เลือก model ได้เยอะมาก'
+    )
     api_key = models.CharField(
         max_length=200, blank=True, default='',
-        verbose_name='Gemini API Key',
-        help_text='Google Gemini API Key — ดูได้จาก https://makersuite.google.com/app/apikey'
+        verbose_name='API Key',
+        help_text='• Gemini: ดูได้จาก https://makersuite.google.com/app/apikey | '
+                  '• OpenRouter: ดูได้จาก https://openrouter.ai/keys'
     )
     model_name = models.CharField(
-        max_length=100, default='gemini-2.0-flash',
+        max_length=150, default='google/gemini-2.0-flash',
         verbose_name='Model Name',
-        help_text='ชื่อ model เช่น gemini-2.0-flash, gemini-1.5-pro'
+        help_text='ตัวอย่าง OpenRouter: google/gemini-2.0-flash, anthropic/claude-3.5-sonnet, '
+                  'meta-llama/llama-3.3-70b-instruct, openai/gpt-4o-mini | '
+                  'ดูทั้งหมดได้ที่ https://openrouter.ai/models'
     )
     interval_minutes = models.PositiveIntegerField(
         default=60,
         verbose_name='รอบการวิเคราะห์ (นาที)',
-        help_text='AI Agent จะวิเคราะห์และตัดสินใจทุกกี่นาที (ค่าน้อย = บ่อยขึ้น = ใช้ quota เร็วขึ้น)'
+        help_text='AI Agent จะวิเคราะห์และตัดสินใจทุกกี่นาที (ค่าน้อย = บ่อยขึ้น = ใช้ token เร็วขึ้น)'
     )
     is_enabled = models.BooleanField(
         default=True,
@@ -202,15 +215,16 @@ class GeminiAISettings(models.Model):
     )
     last_tested   = models.DateTimeField(null=True, blank=True, verbose_name='ทดสอบล่าสุด')
     last_test_ok  = models.BooleanField(null=True, blank=True, verbose_name='ผลทดสอบล่าสุด')
-    last_test_msg = models.CharField(max_length=500, blank=True, verbose_name='ข้อความผลทดสอบ')
+    last_test_msg = models.CharField(max_length=1000, blank=True, verbose_name='ข้อความผลทดสอบ')
 
     class Meta:
-        verbose_name = 'Gemini AI Settings'
-        verbose_name_plural = 'Gemini AI Settings'
+        verbose_name = 'AI Agent Settings'
+        verbose_name_plural = 'AI Agent Settings'
 
     def __str__(self):
         status = '✅ เปิด' if self.is_enabled else '❌ ปิด'
-        return f'Gemini AI: {self.model_name} | {self.interval_minutes} นาที [{status}]'
+        provider_label = 'OpenRouter' if self.provider == 'openrouter' else 'Gemini'
+        return f'AI Agent: {provider_label} | {self.model_name} | {self.interval_minutes} นาที [{status}]'
 
     def save(self, *args, **kwargs):
         self.pk = 1
@@ -219,8 +233,9 @@ class GeminiAISettings(models.Model):
     @classmethod
     def get_settings(cls):
         obj, _ = cls.objects.get_or_create(pk=1, defaults={
+            'provider': 'openrouter',
             'api_key': '',
-            'model_name': 'gemini-2.0-flash',
+            'model_name': 'google/gemini-2.0-flash',
             'interval_minutes': 60,
         })
         return obj
@@ -228,7 +243,7 @@ class GeminiAISettings(models.Model):
     def masked_key(self):
         if not self.api_key:
             return '(ยังไม่ได้ตั้งค่า)'
-        return self.api_key[:6] + '••••••••••••••••••••' + self.api_key[-4:]
+        return self.api_key[:8] + '••••••••••••••••••••' + self.api_key[-4:]
 
 
 class SensorData(models.Model):

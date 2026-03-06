@@ -1,13 +1,11 @@
 """
-Gemini Relay Agent - AI Decision Making
-Uses Google Gemini AI to analyze weather and decide relay control
+AI Relay Agent - AI Decision Making
+Supports Google Gemini (Direct) and OpenRouter (multi-model)
 """
 
 import os
-import time
 import logging
 from datetime import datetime, timedelta
-from google import genai
 from typing import Dict, Tuple, Optional
 from django.utils import timezone
 
@@ -16,95 +14,95 @@ logger = logging.getLogger(__name__)
 # Cooldown duration when free-tier daily quota is exhausted (1 hour)
 QUOTA_COOLDOWN_HOURS = 1
 
+
 class GeminiRelayAgent:
-    """AI Agent using Google Gemini for intelligent relay control"""
-    
+    """AI Agent supporting Google Gemini Direct and OpenRouter"""
+
     def __init__(self):
         # Read from DB first, fallback to env
         try:
             from iot_dashboard.models import GeminiAISettings
-            settings = GeminiAISettings.get_settings()
-            self.api_key   = settings.api_key or os.getenv('GEMINI_API_KEY')
-            self.model_name = settings.model_name or 'gemini-2.0-flash'
-            self.is_enabled = settings.is_enabled
+            s = GeminiAISettings.get_settings()
+            self.provider        = s.provider        or 'openrouter'
+            self.api_key         = s.api_key         or os.getenv('GEMINI_API_KEY', '')
+            self.model_name      = s.model_name      or 'google/gemini-2.0-flash'
+            self.is_enabled      = s.is_enabled
         except Exception:
-            self.api_key    = os.getenv('GEMINI_API_KEY')
-            self.model_name = 'gemini-2.0-flash'
-            self.is_enabled = True
+            self.provider        = 'openrouter'
+            self.api_key         = os.getenv('GEMINI_API_KEY', '')
+            self.model_name      = 'google/gemini-2.0-flash'
+            self.is_enabled      = True
 
-        self._quota_exhausted_until: Optional[datetime] = None  # cooldown tracker
+        self._quota_exhausted_until: Optional[datetime] = None
+        self.client = None
 
         if not self.is_enabled:
-            logger.info("ℹ️ Gemini AI Agent ถูกปิดใช้งานจากการตั้งค่า")
-            self.client = None
-        elif not self.api_key:
-            logger.warning("⚠️ GEMINI_API_KEY not found in environment variables")
-            self.client = None
-        else:
-            try:
+            logger.info("ℹ️ AI Agent ถูกปิดใช้งานจากการตั้งค่า")
+            return
+        if not self.api_key:
+            logger.warning("⚠️ API Key ยังไม่ได้ตั้งค่า")
+            return
+
+        try:
+            if self.provider == 'openrouter':
+                from openai import OpenAI
+                self.client = OpenAI(
+                    base_url='https://openrouter.ai/api/v1',
+                    api_key=self.api_key,
+                )
+                logger.info(f"✅ OpenRouter configured ({self.model_name})")
+            else:  # gemini direct
+                from google import genai
                 self.client = genai.Client(api_key=self.api_key)
-                logger.info(f"✅ Gemini AI configured successfully ({self.model_name})")
-            except Exception as e:
-                logger.error(f"❌ Error configuring Gemini AI: {e}")
-                self.client = None
-    
+                logger.info(f"✅ Gemini Direct configured ({self.model_name})")
+        except Exception as e:
+            logger.error(f"❌ Error configuring AI client: {e}")
+            self.client = None
+
     def analyze_and_decide(self, weather_data: Dict) -> Tuple[str, str, float]:
-        """
-        Analyze weather data and decide on relay control
-        
-        Args:
-            weather_data: Dictionary containing weather information
-            
-        Returns:
-            Tuple of (decision, reasoning, confidence)
-            - decision: 'on' or 'off'
-            - reasoning: AI's explanation
-            - confidence: 0.0 to 1.0
-        """
         if not self.client:
-            logger.warning("⚠️ Gemini AI not configured, using fallback logic")
+            logger.warning("⚠️ AI client ไม่เรียบร้อย — ใช้ fallback logic")
             return self._fallback_decision(weather_data)
-        
-        # Check if still in quota cooldown period
+
         if self._quota_exhausted_until and datetime.now() < self._quota_exhausted_until:
             remaining = int((self._quota_exhausted_until - datetime.now()).total_seconds() / 60)
-            logger.warning(f"⏳ Quota cooldown active — skipping AI call, {remaining} min remaining. Using fallback logic.")
+            logger.warning(f"⏳ Quota cooldown active — {remaining} min remaining")
             return self._fallback_decision(weather_data)
-        
-        try:
-            # Create prompt for Gemini
-            prompt = self._create_prompt(weather_data)
-            
-            logger.info("🤖 Asking Gemini AI for decision...")
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt
-            )
-            
-            # Successful call — clear any previous cooldown
-            self._quota_exhausted_until = None
 
-            # Parse AI response
-            decision, reasoning, confidence = self._parse_response(response.text)
-            
+        try:
+            prompt = self._create_prompt(weather_data)
+            logger.info(f"🤖 Asking AI ({self.provider}: {self.model_name})...")
+
+            if self.provider == 'openrouter':
+                response = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[{'role': 'user', 'content': prompt}],
+                )
+                text = response.choices[0].message.content or ''
+            else:  # gemini direct
+                response = self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt,
+                )
+                text = response.text or ''
+
+            self._quota_exhausted_until = None
+            decision, reasoning, confidence = self._parse_response(text)
             logger.info(f"✅ AI Decision: {decision.upper()} (Confidence: {confidence*100:.1f}%)")
-            logger.info(f"💭 Reasoning: {reasoning[:100]}...")
-            
             return decision, reasoning, confidence
-            
+
         except Exception as e:
-            error_str = str(e)
-            if '429' in error_str or 'RESOURCE_EXHAUSTED' in error_str:
+            err = str(e)
+            if '429' in err or 'RESOURCE_EXHAUSTED' in err or 'rate_limit' in err.lower():
                 self._quota_exhausted_until = datetime.now() + timedelta(hours=QUOTA_COOLDOWN_HOURS)
                 logger.warning(
-                    f"⚠️ Gemini free-tier quota exhausted. "
-                    f"AI calls paused for {QUOTA_COOLDOWN_HOURS}h until {self._quota_exhausted_until.strftime('%H:%M:%S')}. "
-                    f"Using fallback rule-based logic."
+                    f"⚠️ Rate limit / quota exhausted. "
+                    f"Pausing AI calls for {QUOTA_COOLDOWN_HOURS}h. Using fallback."
                 )
             else:
                 logger.error(f"❌ Error getting AI decision: {e}")
             return self._fallback_decision(weather_data)
-    
+
     def _create_prompt(self, weather: Dict) -> str:
         """Create prompt for Gemini AI"""
         
