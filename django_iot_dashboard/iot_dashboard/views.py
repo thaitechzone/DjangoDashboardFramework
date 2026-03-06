@@ -8,7 +8,7 @@ import pytz
 import json
 import logging
 from .models import Device, SensorData, Relay
-from .mqtt_manager import get_mqtt_manager, send_led_command
+from .mqtt_manager import get_mqtt_manager, send_led_command, send_relay_command
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -219,17 +219,15 @@ def control_relay(request):
                 return redirect('dashboard')
             
             # ส่งคำสั่งผ่าน MQTT Manager
-            logger.info(f"🎮 Sending RELAY command: {command}")
-            
-            # TODO: ใช้ฟังก์ชัน send_relay_command() เมื่อมีการเพิ่มใน mqtt_manager
-            # success, result_msg = send_relay_command(relay_num, command)
-            
-            # ตอนนี้ใช้ MQTT manager โดยตรง
-            mqtt_manager = get_mqtt_manager()
-            mqtt_topic = f'thaitechzone/v2_board/control/relay{relay_num}'
             mqtt_payload = 'ON' if new_state else 'OFF'
-            
-            success = mqtt_manager.publish(mqtt_topic, mqtt_payload)
+            user_info = request.user.username if request.user.is_authenticated else 'anonymous'
+            logger.info(f"🎮 Sending RELAY {relay_num} command: {mqtt_payload} by {user_info}")
+
+            success, result_msg = send_relay_command(
+                int(relay_num), mqtt_payload,
+                source='manual',
+                reason=f'Dashboard button by {user_info}: {mqtt_payload}'
+            )
             
             if success:
                 # อัพเดทสถานะใน database

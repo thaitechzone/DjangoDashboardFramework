@@ -100,7 +100,11 @@ class AIAgentScheduler:
             command = 'ON' if decision == 'on' else 'OFF'
             
             logger.info(f"📡 Sending command to Relay {relay_num}: {command}")
-            success, message = send_relay_command(relay_num, command)
+            success, message = send_relay_command(
+                relay_num, command,
+                source='ai_agent',
+                reason=f"AI decision (confidence={confidence*100:.1f}%): {reasoning[:200]}"
+            )
             
             if success:
                 logger.info(f"✅ Relay command successful: {message}")

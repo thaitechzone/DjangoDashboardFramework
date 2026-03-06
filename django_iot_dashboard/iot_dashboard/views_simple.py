@@ -171,10 +171,15 @@ def control_relay(request):
                 return redirect('dashboard_simple')
             
             # ส่งคำสั่งผ่าน MQTT Manager
-            logger.info(f"🎮 Sending RELAY {relay_num} command: {mqtt_command}")
-            
+            user_info = request.user.username if request.user.is_authenticated else 'anonymous'
+            logger.info(f"🎮 Sending RELAY {relay_num} command: {mqtt_command} by {user_info}")
+
             # ใช้ฟังก์ชัน send_relay_command
-            success, result_msg = send_relay_command(int(relay_num), mqtt_command)
+            success, result_msg = send_relay_command(
+                int(relay_num), mqtt_command,
+                source='manual',
+                reason=f'Dashboard button by {user_info}: {mqtt_command}'
+            )
             
             if success:
                 # อัพเดทสถานะใน database

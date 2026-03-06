@@ -6,7 +6,7 @@ admin.site.unregister(Group)
 from django.utils.html import format_html, mark_safe
 from django.utils import timezone
 from django.db.models import Avg, Count
-from .models import Device, SensorData, Relay, DeviceConfig, ThresholdSetting, AIDecisionLog
+from .models import Device, SensorData, Relay, RelayLog, DeviceConfig, ThresholdSetting, AIDecisionLog
 
 # ─────────────────────────────────────────────
 #  Admin Site Customization
@@ -130,7 +130,7 @@ class DeviceAdmin(admin.ModelAdmin):
     def last_updated_th(self, obj):
         return format_html(
             '<span style="white-space:nowrap;font-size:12px;color:#495057;">{}</span>',
-            obj.last_updated.strftime('%d/%m/%Y %H:%M')
+            timezone.localtime(obj.last_updated).strftime('%d/%m/%Y %H:%M')
         )
     last_updated_th.short_description = 'อัปเดตล่าสุด'
     last_updated_th.admin_order_field = 'last_updated'
@@ -138,7 +138,7 @@ class DeviceAdmin(admin.ModelAdmin):
     def created_at_th(self, obj):
         return format_html(
             '<span style="white-space:nowrap;font-size:12px;color:#6c757d;">{}</span>',
-            obj.created_at.strftime('%d/%m/%Y %H:%M')
+            timezone.localtime(obj.created_at).strftime('%d/%m/%Y %H:%M')
         )
     created_at_th.short_description = 'สร้างเมื่อ'
     created_at_th.admin_order_field = 'created_at'
@@ -247,7 +247,7 @@ class RelayAdmin(admin.ModelAdmin):
     def last_updated_th(self, obj):
         return format_html(
             '<span style="white-space:nowrap;font-size:12px;color:#495057;">{}</span>',
-            obj.last_updated.strftime('%d/%m/%Y %H:%M')
+            timezone.localtime(obj.last_updated).strftime('%d/%m/%Y %H:%M')
         )
     last_updated_th.short_description = 'อัปเดตล่าสุด'
     last_updated_th.admin_order_field = 'last_updated'
@@ -255,10 +255,36 @@ class RelayAdmin(admin.ModelAdmin):
     def created_at_th(self, obj):
         return format_html(
             '<span style="white-space:nowrap;font-size:12px;color:#6c757d;">{}</span>',
-            obj.created_at.strftime('%d/%m/%Y %H:%M')
+            timezone.localtime(obj.created_at).strftime('%d/%m/%Y %H:%M')
         )
     created_at_th.short_description = 'สร้างเมื่อ'
     created_at_th.admin_order_field = 'created_at'
+
+    def save_model(self, request, obj, form, change):
+        """บันทึก RelayLog เมื่อมีการแก้ไขสถานะ relay ผ่าน Admin panel"""
+        if change:
+            try:
+                old = Relay.objects.get(pk=obj.pk)
+                relay_fields = [
+                    (1, 'relay1_status'),
+                    (2, 'relay2_status'),
+                    (3, 'relay3_status'),
+                ]
+                user_info = request.user.username if request.user.is_authenticated else 'admin'
+                for relay_num, field in relay_fields:
+                    old_val = getattr(old, field)
+                    new_val = getattr(obj, field)
+                    if old_val != new_val:
+                        RelayLog.record(
+                            relay_number=relay_num,
+                            new_state=new_val,
+                            previous_state=old_val,
+                            source='manual',
+                            reason=f'Admin panel edited by {user_info}'
+                        )
+            except Relay.DoesNotExist:
+                pass
+        super().save_model(request, obj, form, change)
 
 
 # ─────────────────────────────────────────────
@@ -266,7 +292,7 @@ class RelayAdmin(admin.ModelAdmin):
 # ─────────────────────────────────────────────
 @admin.register(SensorData)
 class SensorDataAdmin(admin.ModelAdmin):
-    list_display  = ('device_name_badge', 'temperature_badge', 'humidity_badge', 'timestamp_th')
+    list_display  = ('device_name_badge', 'temperature_badge', 'humidity_badge', 'ds18b20_badge', 'timestamp_th')
     list_display_links = ('device_name_badge',)
     list_filter   = ('device_name',)
     search_fields = ('device_name',)
@@ -274,6 +300,9 @@ class SensorDataAdmin(admin.ModelAdmin):
     date_hierarchy  = 'timestamp'
     ordering = ('-timestamp',)
     list_per_page = 50
+    actions = ['delete_selected_data', 'delete_older_than_1day',
+               'delete_older_than_7days', 'delete_older_than_30days', 'delete_all_data',
+               'export_excel', 'export_json']
 
     class Media:
         css = {'all': ('iot_dashboard/admin_custom.css',)}
@@ -290,11 +319,10 @@ class SensorDataAdmin(admin.ModelAdmin):
     def timestamp_th(self, obj):
         return format_html(
             '<span style="white-space:nowrap;font-size:12px;color:#495057;">{}</span>',
-            obj.timestamp.strftime('%d/%m/%Y %H:%M:%S')
+            timezone.localtime(obj.timestamp).strftime('%d/%m/%Y %H:%M:%S')
         )
     timestamp_th.short_description = 'เวลา'
     timestamp_th.admin_order_field = 'timestamp'
-    actions = ['delete_old_data']
 
     def temperature_badge(self, obj):
         if obj.temperature is None:
@@ -306,7 +334,7 @@ class SensorDataAdmin(admin.ModelAdmin):
             '<span style="color:{};font-weight:bold;">{} {}°C</span>',
             color, icon, temp
         )
-    temperature_badge.short_description = 'อุณหภูมิ'
+    temperature_badge.short_description = 'อุณหภูมิ (XY-MD03)'
 
     def humidity_badge(self, obj):
         if obj.humidity is None:
@@ -318,13 +346,123 @@ class SensorDataAdmin(admin.ModelAdmin):
             '<span style="color:{};font-weight:bold;">{} {}%</span>',
             color, icon, hum
         )
-    humidity_badge.short_description = 'ความชื้น'
+    humidity_badge.short_description = 'ความชื้น (XY-MD03)'
 
-    @admin.action(description='🗑️ ลบข้อมูล Sensor ที่เลือก')
-    def delete_old_data(self, request, queryset):
+    def ds18b20_badge(self, obj):
+        if obj.ds18b20_temperature is None:
+            return format_html('<span style="color:#ccc;font-size:12px;">—</span>')
+        temp = f'{obj.ds18b20_temperature:.1f}'
+        color = '#dc3545' if obj.ds18b20_temperature > 35 else ('#007bff' if obj.ds18b20_temperature < 20 else '#6f42c1')
+        return format_html(
+            '<span style="color:{};font-weight:bold;white-space:nowrap;">🌡️ {}°C</span>',
+            color, temp
+        )
+    ds18b20_badge.short_description = 'DS18B20'
+    ds18b20_badge.admin_order_field = 'ds18b20_temperature'
+
+    # ── Delete Actions ──────────────────────────────────────
+
+    @admin.action(description='🗑️ ลบข้อมูลที่เลือก')
+    def delete_selected_data(self, request, queryset):
         count = queryset.count()
         queryset.delete()
-        self.message_user(request, f"ลบข้อมูล Sensor {count} รายการสำเร็จ")
+        self.message_user(request, f'✅ ลบข้อมูล {count} รายการสำเร็จ')
+
+    @admin.action(description='📅 ลบข้อมูลเก่ากว่า 1 วัน')
+    def delete_older_than_1day(self, request, queryset):
+        from datetime import timedelta
+        cutoff = timezone.now() - timedelta(days=1)
+        count, _ = queryset.model.objects.filter(timestamp__lt=cutoff).delete()
+        self.message_user(request, f'✅ ลบข้อมูลเก่ากว่า 1 วัน จำนวน {count} รายการสำเร็จ')
+
+    @admin.action(description='📅 ลบข้อมูลเก่ากว่า 7 วัน')
+    def delete_older_than_7days(self, request, queryset):
+        from datetime import timedelta
+        cutoff = timezone.now() - timedelta(days=7)
+        count, _ = queryset.model.objects.filter(timestamp__lt=cutoff).delete()
+        self.message_user(request, f'✅ ลบข้อมูลเก่ากว่า 7 วัน จำนวน {count} รายการสำเร็จ')
+
+    @admin.action(description='📅 ลบข้อมูลเก่ากว่า 30 วัน')
+    def delete_older_than_30days(self, request, queryset):
+        from datetime import timedelta
+        cutoff = timezone.now() - timedelta(days=30)
+        count, _ = queryset.model.objects.filter(timestamp__lt=cutoff).delete()
+        self.message_user(request, f'✅ ลบข้อมูลเก่ากว่า 30 วัน จำนวน {count} รายการสำเร็จ')
+
+    @admin.action(description='⚠️ ลบข้อมูลทั้งหมด (ล้างตาราง)')
+    def delete_all_data(self, request, queryset):
+        count, _ = queryset.model.objects.all().delete()
+        self.message_user(request, f'✅ ลบข้อมูลทั้งหมด จำนวน {count} รายการสำเร็จ')
+
+    # ── Export Actions ──────────────────────────────────────
+
+    @admin.action(description='📊 Export เป็น Excel (.xlsx)')
+    def export_excel(self, request, queryset):
+        import openpyxl
+        from django.http import HttpResponse
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'SensorData'
+
+        # Header row
+        headers = ['ID', 'Device', 'อุณหภูมิ XY-MD03 (°C)', 'ความชื้น XY-MD03 (%)',
+                   'DS18B20 (°C)', 'เวลา (Asia/Bangkok)']
+        ws.append(headers)
+
+        # Style header
+        from openpyxl.styles import Font, PatternFill, Alignment
+        header_fill = PatternFill('solid', fgColor='1F77B4')
+        header_font = Font(bold=True, color='FFFFFF')
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+
+        # Data rows
+        for obj in queryset.order_by('-timestamp'):
+            local_dt = timezone.localtime(obj.timestamp).strftime('%d/%m/%Y %H:%M:%S')
+            ws.append([
+                obj.pk,
+                obj.device_name,
+                obj.temperature,
+                obj.humidity,
+                obj.ds18b20_temperature,
+                local_dt,
+            ])
+
+        # Auto-fit column widths
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            ws.column_dimensions[col[0].column_letter].width = max_len + 4
+
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename="sensor_data.xlsx"'
+        wb.save(response)
+        return response
+
+    @admin.action(description='📋 Export เป็น JSON (.json)')
+    def export_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        rows = []
+        for obj in queryset.order_by('-timestamp'):
+            rows.append({
+                'id': obj.pk,
+                'device_name': obj.device_name,
+                'temperature_xymd03': obj.temperature,
+                'humidity_xymd03': obj.humidity,
+                'ds18b20_temperature': obj.ds18b20_temperature,
+                'timestamp': timezone.localtime(obj.timestamp).strftime('%Y-%m-%d %H:%M:%S'),
+            })
+
+        content = json.dumps(rows, ensure_ascii=False, indent=2)
+        response = HttpResponse(content, content_type='application/json; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="sensor_data.json"'
+        return response
 
 
 # ─────────────────────────────────────────────
@@ -394,6 +532,162 @@ class ThresholdSettingAdmin(admin.ModelAdmin):
 
 
 # ─────────────────────────────────────────────
+#  Relay Log
+# ─────────────────────────────────────────────
+@admin.register(RelayLog)
+class RelayLogAdmin(admin.ModelAdmin):
+    list_display  = ('timestamp_th', 'relay_badge', 'state_badge', 'prev_state_badge',
+                     'source_badge', 'reason_preview')
+    list_display_links = ('timestamp_th',)
+    list_filter   = ('relay_number', 'new_state', 'source', 'timestamp')
+    search_fields = ('reason',)
+    date_hierarchy  = 'timestamp'
+    ordering = ('-timestamp',)
+    list_per_page = 50
+    actions = ['export_excel', 'export_json']
+
+    class Media:
+        css = {'all': ('iot_dashboard/admin_custom.css',)}
+
+    def timestamp_th(self, obj):
+        return format_html(
+            '<span style="white-space:nowrap;font-size:12px;color:#495057;">{}</span>',
+            timezone.localtime(obj.timestamp).strftime('%d/%m/%Y %H:%M:%S')
+        )
+    timestamp_th.short_description = 'เวลา'
+    timestamp_th.admin_order_field = 'timestamp'
+
+    def relay_badge(self, obj):
+        colors = {1: '#007bff', 2: '#6f42c1', 3: '#fd7e14'}
+        color = colors.get(obj.relay_number, '#6c757d')
+        return format_html(
+            '<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
+            'background:{0}20;color:{0};font-weight:bold;white-space:nowrap;'
+            'font-size:12px;border:1px solid {0}40;">RELAY {1}</span>',
+            color, obj.relay_number
+        )
+    relay_badge.short_description = 'Relay'
+    relay_badge.admin_order_field = 'relay_number'
+
+    def state_badge(self, obj):
+        if obj.new_state:
+            return format_html(
+                '<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
+                'background:#d4edda;color:#155724;font-weight:bold;'
+                'white-space:nowrap;">🟢 ON</span>'
+            )
+        return format_html(
+            '<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
+            'background:#e2e3e5;color:#495057;white-space:nowrap;">⚫ OFF</span>'
+        )
+    state_badge.short_description = 'สถานะใหม่'
+    state_badge.admin_order_field = 'new_state'
+
+    def prev_state_badge(self, obj):
+        if obj.previous_state is None:
+            return format_html('<span style="color:#ccc;">-</span>')
+        if obj.previous_state:
+            return format_html('<span style="color:#155724;font-size:12px;">🟢 ON</span>')
+        return format_html('<span style="color:#6c757d;font-size:12px;">⚫ OFF</span>')
+    prev_state_badge.short_description = 'สถานะเดิม'
+    prev_state_badge.admin_order_field = 'previous_state'
+
+    SOURCE_STYLES = {
+        'mqtt':      ('#0d6efd', '📡 ESP32'),
+        'ai_agent':  ('#6f42c1', '🤖 AI Agent'),
+        'threshold': ('#dc3545', '⚠️ Threshold'),
+        'manual':    ('#198754', '✏️ Manual'),
+    }
+
+    def source_badge(self, obj):
+        color, label = self.SOURCE_STYLES.get(obj.source, ('#6c757d', obj.source))
+        return format_html(
+            '<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
+            'background:{0}18;color:{0};font-weight:bold;white-space:nowrap;'
+            'font-size:12px;border:1px solid {0}30;">{1}</span>',
+            color, label
+        )
+    source_badge.short_description = 'แหล่งที่สั่ง'
+    source_badge.admin_order_field = 'source'
+
+    def reason_preview(self, obj):
+        if not obj.reason:
+            return format_html('<span style="color:#ccc;">-</span>')
+        short = obj.reason[:80] + '…' if len(obj.reason) > 80 else obj.reason
+        return format_html(
+            '<span style="font-size:12px;color:#495057;" title="{full}">{short}</span>',
+            full=obj.reason, short=short
+        )
+    reason_preview.short_description = 'เหตุผล'
+
+    # ── Export Actions ───────────────────────────────────────
+
+    @admin.action(description='📊 Export เป็น Excel (.xlsx)')
+    def export_excel(self, request, queryset):
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from django.http import HttpResponse
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'RelayLog'
+        headers = ['ID', 'Relay', 'สถานะใหม่', 'สถานะเดิม', 'แหล่งที่สั่ง', 'เหตุผล', 'เวลา']
+        ws.append(headers)
+        header_fill = PatternFill('solid', fgColor='1F77B4')
+        header_font = Font(bold=True, color='FFFFFF')
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+
+        source_labels = dict(RelayLog.SOURCE_CHOICES)
+        for obj in queryset.order_by('-timestamp'):
+            ws.append([
+                obj.pk,
+                f'RELAY {obj.relay_number}',
+                'ON' if obj.new_state else 'OFF',
+                ('ON' if obj.previous_state else 'OFF') if obj.previous_state is not None else '-',
+                source_labels.get(obj.source, obj.source),
+                obj.reason,
+                timezone.localtime(obj.timestamp).strftime('%d/%m/%Y %H:%M:%S'),
+            ])
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 60)
+
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename="relay_log.xlsx"'
+        wb.save(response)
+        return response
+
+    @admin.action(description='📋 Export เป็น JSON (.json)')
+    def export_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        source_labels = dict(RelayLog.SOURCE_CHOICES)
+        rows = []
+        for obj in queryset.order_by('-timestamp'):
+            rows.append({
+                'id': obj.pk,
+                'relay_number': obj.relay_number,
+                'new_state': 'ON' if obj.new_state else 'OFF',
+                'previous_state': ('ON' if obj.previous_state else 'OFF') if obj.previous_state is not None else None,
+                'source': source_labels.get(obj.source, obj.source),
+                'reason': obj.reason,
+                'timestamp': timezone.localtime(obj.timestamp).strftime('%Y-%m-%d %H:%M:%S'),
+            })
+
+        content = json.dumps(rows, ensure_ascii=False, indent=2)
+        response = HttpResponse(content, content_type='application/json; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="relay_log.json"'
+        return response
+
+
+# ─────────────────────────────────────────────
 #  AI Decision Log
 # ─────────────────────────────────────────────
 @admin.register(AIDecisionLog)
@@ -433,7 +727,7 @@ class AIDecisionLogAdmin(admin.ModelAdmin):
     def timestamp_th(self, obj):
         return format_html(
             '<span style="white-space:nowrap;font-size:12px;">{}</span>',
-            obj.timestamp.strftime('%d/%m/%Y %H:%M')
+            timezone.localtime(obj.timestamp).strftime('%d/%m/%Y %H:%M')
         )
     timestamp_th.short_description = 'เวลา'
     timestamp_th.admin_order_field = 'timestamp'
@@ -609,7 +903,7 @@ class DeviceConfigAdmin(admin.ModelAdmin):
     def updated_at_th(self, obj):
         return format_html(
             '<span style="white-space:nowrap;font-size:12px;color:#495057;">{}</span>',
-            obj.updated_at.strftime('%d/%m/%Y %H:%M')
+            timezone.localtime(obj.updated_at).strftime('%d/%m/%Y %H:%M')
         )
     updated_at_th.short_description = 'อัปเดตล่าสุด'
     updated_at_th.admin_order_field = 'updated_at'

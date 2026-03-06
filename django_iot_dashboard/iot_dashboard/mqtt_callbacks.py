@@ -6,7 +6,7 @@ MQTT Callbacks - จัดการข้อความที่ได้รั
 
 import logging
 from django.utils import timezone
-from .models import Relay, Device
+from .models import Relay, RelayLog, Device
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,16 @@ def handle_relay_state_message(topic, message):
         
         relay_controller.last_updated = timezone.now()
         relay_controller.save()
-        
+
+        # บันทึก RelayLog ทุกครั้ง (ทั้งเปลี่ยนและยืนยันสถานะเดิม)
+        RelayLog.record(
+            relay_number=relay_num,
+            new_state=new_state,
+            previous_state=old_state,
+            source='mqtt',
+            reason=f'ESP32 feedback: {message_upper}',
+        )
+
         # แสดง log เฉพาะเมื่อสถานะเปลี่ยน
         if old_state != new_state:
             logger.info(f"✅ RELAY {relay_num} updated: {old_state} → {new_state}")
@@ -80,19 +89,39 @@ def handle_sensor_data_message(topic, message):
     """
     try:
         import json
-        from .models import SensorData, ThresholdSetting
+        from datetime import timedelta
+        from .models import SensorData, ThresholdSetting, DeviceConfig
         from .mqtt_manager import send_relay_command
-        
+
         # Parse JSON
         data = json.loads(message)
-        
-        # สร้างข้อมูล sensor ใหม่
-        sensor_data = SensorData.objects.create(
-            device_name=data.get('device', 'ESP32'),
-            temperature=data.get('temperature'),
-            humidity=data.get('humidity'),
-            timestamp=timezone.now()
-        )
+
+        # ใช้ device_name จาก DeviceConfig เสมอ เพื่อให้ตรงกับ DS18B20 callback
+        config = DeviceConfig.get_config()
+        device_name = config.device_name
+        temperature = data.get('temperature')
+        humidity = data.get('humidity')
+        now = timezone.now()
+
+        # ถ้ามี record ใด ๆ ของ device นี้ภายใน 10 วิ → merge เข้ากัน (เติม temp/hum)
+        existing = SensorData.objects.filter(
+            device_name=device_name,
+            timestamp__gte=now - timedelta(seconds=10),
+        ).order_by('-timestamp').first()
+
+        if existing:
+            existing.temperature = temperature
+            existing.humidity = humidity
+            existing.save(update_fields=['temperature', 'humidity'])
+            sensor_data = existing
+            logger.info(f"🔗 Merged DHT22 into recent record for '{device_name}'")
+        else:
+            sensor_data = SensorData.objects.create(
+                device_name=device_name,
+                temperature=temperature,
+                humidity=humidity,
+                timestamp=now,
+            )
         
         logger.info(f"📊 Sensor data saved: Temp={sensor_data.temperature}°C, Hum={sensor_data.humidity}%")
         
@@ -116,10 +145,15 @@ def handle_sensor_data_message(topic, message):
                     
                     # เปิด Relay 1
                     send_relay_command(1, 'ON')
-                    
+
                     # อัพเดทสถานะ Alarm
                     threshold.activate_alarm(reason=check_result['reason'])
-                    
+
+                    # บันทึก RelayLog
+                    from .models import RelayLog
+                    RelayLog.record(relay_number=1, new_state=True, previous_state=False,
+                                    source='threshold', reason=check_result['reason'])
+
                     logger.info(f"✅ Auto-Control: Relay 1 turned ON (Alarm Activated)")
                 
                 # ถ้ากลับมาปกติและ Alarm เปิดอยู่
@@ -128,10 +162,15 @@ def handle_sensor_data_message(topic, message):
                     
                     # ปิด Relay 1
                     send_relay_command(1, 'OFF')
-                    
+
                     # ปิด Alarm
                     threshold.deactivate_alarm()
-                    
+
+                    # บันทึก RelayLog
+                    from .models import RelayLog
+                    RelayLog.record(relay_number=1, new_state=False, previous_state=True,
+                                    source='threshold', reason=check_result['reason'])
+
                     logger.info(f"✅ Auto-Control: Relay 1 turned OFF (Alarm Deactivated)")
                 
                 # Log สถานะปัจจุบัน
@@ -189,13 +228,34 @@ def handle_ds18b20_message(topic, message):
     try:
         temp_value = float(message.strip())
 
-        from .models import DeviceConfig
+        from datetime import timedelta
+        from .models import DeviceConfig, SensorData
         config = DeviceConfig.get_config()
         config.ds18b20_temperature = temp_value
         config.ds18b20_updated_at = timezone.now()
         config.save(update_fields=['ds18b20_temperature', 'ds18b20_updated_at'])
 
-        logger.info(f"🌡️ DS18B20 temperature received: {temp_value}°C → saved to DeviceConfig")
+        device_name = config.device_name
+        now = timezone.now()
+
+        # ถ้ามี record ใด ๆ ของ device นี้ภายใน 10 วิ → merge เข้ากัน (เติม ds18b20)
+        existing = SensorData.objects.filter(
+            device_name=device_name,
+            timestamp__gte=now - timedelta(seconds=10),
+        ).order_by('-timestamp').first()
+
+        if existing:
+            existing.ds18b20_temperature = temp_value
+            existing.save(update_fields=['ds18b20_temperature'])
+            logger.info(f"🔗 Merged DS18B20 into recent record for '{device_name}'")
+        else:
+            SensorData.objects.create(
+                device_name=device_name,
+                ds18b20_temperature=temp_value,
+                timestamp=now,
+            )
+
+        logger.info(f"🌡️ DS18B20 temperature received: {temp_value}°C → saved to DeviceConfig & SensorData")
 
     except (ValueError, TypeError) as e:
         logger.warning(f"⚠️ Invalid DS18B20 payload '{message}': {e}")

@@ -6,6 +6,8 @@ Django App Startup Script
 
 from django.apps import AppConfig
 import logging
+import os
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +18,12 @@ class IotDashboardConfig(AppConfig):
     
     def ready(self):
         """เริ่มต้น MQTT Manager และ AI Agent Scheduler เมื่อ Django app พร้อมใช้งาน"""
+        # Django dev server spawns 2 processes (watcher + worker).
+        # Only run MQTT/AI init in the worker process (RUN_MAIN=true) to avoid
+        # two separate MQTT connections both writing duplicate records to the DB.
+        if 'runserver' in sys.argv and os.environ.get('RUN_MAIN') != 'true':
+            logger.info("⏭️  Skipping MQTT/AI init in watcher process (use --noreload to disable)")
+            return
         try:
             # Import ใน ready() เพื่อหลีกเลี่ยง import errors
             from .mqtt_manager import get_mqtt_manager

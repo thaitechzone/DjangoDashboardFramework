@@ -53,10 +53,53 @@ class Relay(models.Model):
         return "ไม่มีข้อมูล"
 
 
+class RelayLog(models.Model):
+    """บันทึกประวัติการเปลี่ยนแปลงสถานะ RELAY ทุกครั้ง"""
+
+    SOURCE_CHOICES = [
+        ('mqtt',      'ESP32 (MQTT feedback)'),
+        ('ai_agent',  'AI Agent'),
+        ('threshold', 'Threshold Auto-control'),
+        ('manual',    'Manual (Admin)'),
+    ]
+
+    relay_number = models.IntegerField(
+        choices=[(1, 'RELAY 1'), (2, 'RELAY 2'), (3, 'RELAY 3')],
+        verbose_name='Relay'
+    )
+    new_state    = models.BooleanField(verbose_name='สถานะใหม่')
+    previous_state = models.BooleanField(null=True, blank=True, verbose_name='สถานะเดิม')
+    source       = models.CharField(max_length=20, choices=SOURCE_CHOICES,
+                                    default='mqtt', verbose_name='แหล่งที่สั่ง')
+    reason       = models.TextField(blank=True, verbose_name='เหตุผล')
+    timestamp    = models.DateTimeField(default=timezone.now, verbose_name='เวลา', db_index=True)
+
+    class Meta:
+        verbose_name = 'Relay Log'
+        verbose_name_plural = 'Relay Logs'
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        state = 'ON' if self.new_state else 'OFF'
+        return f"[{self.get_source_display()}] RELAY {self.relay_number} → {state} @ {self.timestamp:%d/%m/%Y %H:%M:%S}"
+
+    @classmethod
+    def record(cls, relay_number, new_state, previous_state=None, source='mqtt', reason=''):
+        """Helper สร้าง log entry"""
+        cls.objects.create(
+            relay_number=relay_number,
+            new_state=new_state,
+            previous_state=previous_state,
+            source=source,
+            reason=reason,
+        )
+
+
 class SensorData(models.Model):
     device_name = models.CharField(max_length=100, default="ESP32_DHT22")
     temperature = models.FloatField(null=True, blank=True)
     humidity = models.FloatField(null=True, blank=True)
+    ds18b20_temperature = models.FloatField(null=True, blank=True, verbose_name="DS18B20 (°C)")
     timestamp = models.DateTimeField(default=timezone.now)
     
     class Meta:

@@ -470,6 +470,9 @@ class MQTTManager:
         """
         if topic not in self.message_callbacks:
             self.message_callbacks[topic] = []
+        if callback in self.message_callbacks[topic]:
+            logger.warning(f"⚠️  Callback already registered for topic: {topic} — skipping duplicate")
+            return
         self.message_callbacks[topic].append(callback)
         logger.info(f"📋 Registered callback for topic: {topic}")
     
@@ -557,26 +560,41 @@ def send_led_command(command):
         logger.error(f"❌ Error in send_led_command: {e}")
         return False, f"Error: {e}"
 
-def send_relay_command(relay_num, command):
+def send_relay_command(relay_num, command, source='ai_agent', reason=''):
     """
     ส่งคำสั่งควบคุม RELAY ผ่าน MQTT Manager
-    
+
     Args:
         relay_num (int): หมายเลข RELAY (1, 2, 3)
         command (str): คำสั่ง (ON/OFF)
-        
+        source (str): แหล่งที่สั่ง ('ai_agent', 'threshold', 'manual')
+        reason (str): เหตุผล
+
     Returns:
         tuple: (success, message)
     """
     try:
         manager = get_mqtt_manager()
         success = manager.send_relay_command(relay_num, command)
-        
+
         if success:
+            # บันทึก RelayLog
+            try:
+                from .models import RelayLog
+                new_state = (command.upper() == 'ON')
+                RelayLog.record(
+                    relay_number=relay_num,
+                    new_state=new_state,
+                    source=source,
+                    reason=reason or f'Command: {command}',
+                )
+            except Exception as log_err:
+                logger.warning(f"⚠️ RelayLog write failed: {log_err}")
+
             return True, f"RELAY {relay_num} command '{command}' sent successfully"
         else:
             return False, f"Failed to send RELAY {relay_num} command '{command}'"
-            
+
     except Exception as e:
         logger.error(f"❌ Error in send_relay_command: {e}")
         return False, f"Error: {e}"
