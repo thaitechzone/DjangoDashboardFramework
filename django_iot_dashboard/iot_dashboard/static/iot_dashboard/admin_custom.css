@@ -1,0 +1,41 @@
+/* ─── AI Decision Log — force left-align all columns ─── */
+.model-aidecisionlog #result_list th,
+.model-aidecisionlog #result_list td {
+    text-align: left !important;
+    vertical-align: middle !important;
+}
+
+/* ─── Sensor Data — left-align ─── */
+.model-sensordata #result_list th,
+.model-sensordata #result_list td {
+    text-align: left !important;
+    vertical-align: middle !important;
+}
+
+/* ─── Device — left-align ─── */
+.model-device #result_list th,
+.model-device #result_list td {
+    text-align: left !important;
+    vertical-align: middle !important;
+}
+
+/* ─── Relay — left-align ─── */
+.model-relay #result_list th,
+.model-relay #result_list td {
+    text-align: left !important;
+    vertical-align: middle !important;
+}
+
+/* ─── Device Config — left-align ─── */
+.model-deviceconfig #result_list th,
+.model-deviceconfig #result_list td {
+    text-align: left !important;
+    vertical-align: middle !important;
+}
+
+/* ─── Threshold Setting — left-align ─── */
+.model-thresholdsetting #result_list th,
+.model-thresholdsetting #result_list td {
+    text-align: left !important;
+    vertical-align: middle !important;
+}

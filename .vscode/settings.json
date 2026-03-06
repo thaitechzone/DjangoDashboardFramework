@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd d:\\\\GitHub\\\\DjangoDashboardFramework\\\\django_iot_dashboard ; python -c \"\nimport django, os\nos\\.environ\\.setdefault\\('DJANGO_SETTINGS_MODULE','dashboard_project\\.settings'\\)\ndjango\\.setup\\(\\)\nfrom django\\.contrib\\.admin\\.sites import AdminSite\nfrom iot_dashboard\\.admin import DeviceAdmin, SensorDataAdmin, DeviceConfigAdmin\nfrom iot_dashboard\\.models import Device, SensorData, DeviceConfig\nsite = AdminSite\\(\\)\nerrors = \\[\\]\nfor AdminCls, Model in \\[\\(DeviceAdmin, Device\\), \\(SensorDataAdmin, SensorData\\), \\(DeviceConfigAdmin, DeviceConfig\\)\\]:\n    a = AdminCls\\(Model, site\\)\n    for obj in Model\\.objects\\.all\\(\\)\\[:2\\]:\n        for col in a\\.list_display:\n            fn = getattr\\(a, col, None\\)\n            if fn:\n                try: fn\\(obj\\)\n                except Exception as e: errors\\.append\\(f'\\{AdminCls\\.__name__\\}\\.\\{col\\}: \\{e\\}'\\)\nprint\\('Errors:', errors if errors else 'None — all OK'\\)\n\" 2>&1 \\| Select-String \"Errors\\|Error\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
