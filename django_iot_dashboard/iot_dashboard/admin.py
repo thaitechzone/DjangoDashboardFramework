@@ -6,7 +6,8 @@ admin.site.unregister(Group)
 from django.utils.html import format_html, mark_safe
 from django.utils import timezone
 from django.db.models import Avg, Count
-from .models import Device, SensorData, Relay, RelayLog, RelaySettings, WeatherAPISettings, GeminiAISettings, DeviceConfig, ThresholdSetting, AIDecisionLog, WeatherLog
+from django.urls import reverse
+from .models import Device, SensorData, Relay, RelayLog, RelaySettings, WeatherAPISettings, GeminiAISettings, DeviceConfig, ThresholdSetting, AIDecisionLog, WeatherLog, N8NPushSettings
 
 # ─────────────────────────────────────────────
 #  Admin Site Customization
@@ -117,7 +118,6 @@ class RelayAdmin(admin.ModelAdmin):
     list_display  = ('name', 'led_status_badge', 'relay1_badge', 'relay2_badge',
                      'relay3_badge', 'relay_summary', 'last_updated_th')
     list_display_links = None   # ไม่มีลิงก์เข้าแก้ไข — read-only
-    list_filter   = ('relay1_status', 'relay2_status', 'relay3_status')
     list_per_page = 20
 
     class Media:
@@ -209,7 +209,6 @@ class RelayAdmin(admin.ModelAdmin):
 class SensorDataAdmin(admin.ModelAdmin):
     list_display  = ('device_name_badge', 'temperature_badge', 'humidity_badge', 'ds18b20_badge', 'timestamp_th')
     list_display_links = ('device_name_badge',)
-    list_filter   = ('device_name',)
     search_fields = ('device_name',)
     readonly_fields = ('timestamp',)
     date_hierarchy  = 'timestamp'
@@ -454,7 +453,6 @@ class RelayLogAdmin(admin.ModelAdmin):
     list_display  = ('timestamp_th', 'relay_badge', 'state_badge', 'prev_state_badge',
                      'source_badge', 'reason_preview')
     list_display_links = ('timestamp_th',)
-    list_filter   = ('relay_number', 'new_state', 'source', 'timestamp')
     search_fields = ('reason',)
     date_hierarchy  = 'timestamp'
     ordering = ('-timestamp',)
@@ -1148,7 +1146,6 @@ class AIDecisionLogAdmin(admin.ModelAdmin):
     list_display  = ('timestamp_th', 'decision_badge', 'confidence_bar',
                      'relay_status_badge', 'command_sent_badge', 'reasoning_preview')
     list_display_links = ('timestamp_th',)
-    list_filter   = ('decision', 'relay_status', 'command_sent', 'timestamp')
 
     class Media:
         css = {'all': ('iot_dashboard/admin_custom.css',)}
@@ -1405,7 +1402,6 @@ class WeatherLogAdmin(admin.ModelAdmin):
         'weather_badge', 'rain_prob_badge', 'aqi_badge',
     )
     list_display_links = ('timestamp_th',)
-    list_filter   = ('weather_main', 'aqi', 'city_name')
     search_fields = ('weather_main', 'weather_desc', 'city_name')
     date_hierarchy  = 'timestamp'
     ordering = ('-timestamp',)
@@ -1695,3 +1691,141 @@ class WeatherLogAdmin(admin.ModelAdmin):
                 self.message_user(request, f'❌ {result["message"]}', level='ERROR')
         except Exception as e:
             self.message_user(request, f'❌ เกิดข้อผิดพลาด: {e}', level='ERROR')
+
+
+# ─────────────────────────────────────────────
+#  N8N Push Settings  (Singleton — ตั้งค่าผ่าน Admin)
+# ─────────────────────────────────────────────
+@admin.register(N8NPushSettings)
+class N8NPushSettingsAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'enabled_badge', 'webhook_badge', 'last_push_badge')
+    list_display_links = ('__str__',)
+
+    class Media:
+        css = {'all': ('iot_dashboard/admin_custom.css',)}
+
+    readonly_fields = ('test_push_button', 'last_push_at', 'last_push_ok', 'last_push_msg')
+
+    fieldsets = (
+        ('🔌 การเชื่อมต่อ N8N', {
+            'description': (
+                '<div style="background:#e8f4fd;padding:10px;border-radius:6px;margin-bottom:8px;">'
+                '<b>📌 วิธีใช้:</b><br>'
+                '1. เปิด N8N และสร้าง Webhook trigger node<br>'
+                '2. คัดลอก Webhook URL จาก N8N มาใส่ใน <b>Snapshot Webhook URL</b><br>'
+                '3. ติ๊ก <b>เปิดใช้งาน N8N Push</b> แล้ว Save<br>'
+                '4. กด <b>🧪 Test Push</b> เพื่อทดสอบการส่งข้อมูล</div>'
+            ),
+            'fields': ('is_enabled', 'webhook_snapshot', 'push_timeout', 'push_min_interval', 'test_push_button'),
+        }),
+        ('🎛️ กรองประเภท Event', {
+            'description': '<small style="color:#6c757d;">เลือก event ที่ต้องการส่งไปยัง N8N (ติ๊ก = ส่ง, ไม่ติ๊ก = ข้าม)</small>',
+            'fields': ('push_on_sensor', 'push_on_relay', 'push_on_alarm', 'push_on_ai', 'push_on_weather'),
+        }),
+        ('📊 สถานะล่าสุด (อัตโนมัติ)', {
+            'fields': ('last_push_at', 'last_push_ok', 'last_push_msg'),
+            'classes': ('collapse',),
+        }),
+    )
+
+    # ── Singleton guard ───────────────────────────────────────────
+
+    def has_add_permission(self, request):
+        return not N8NPushSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        """ข้ามหน้า list → เข้า change page ทันที"""
+        obj, _ = N8NPushSettings.objects.get_or_create(pk=1)
+        from django.shortcuts import redirect
+        return redirect(
+            reverse('admin:iot_dashboard_n8npushsettings_change', args=[obj.pk])
+        )
+
+    # ── Extra URL: test push ──────────────────────────────────────
+
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom = [
+            path('<int:pk>/run-test/',
+                 self.admin_site.admin_view(self._run_test),
+                 name='n8npushsettings_run_test'),
+        ]
+        return custom + urls
+
+    def _run_test(self, request, pk):
+        """ส่ง payload ทดสอบไปยัง webhook ที่ตั้งค่าไว้"""
+        import json, urllib.request, urllib.error
+        from django.shortcuts import redirect
+
+        redirect_url = reverse('admin:iot_dashboard_n8npushsettings_change', args=[pk])
+        cfg = N8NPushSettings.get_settings()
+        url = cfg.webhook_snapshot.strip()
+
+        if not url:
+            self.message_user(request, '❌ ยังไม่ได้ตั้ง Snapshot Webhook URL — กรอก URL แล้ว Save ก่อนทดสอบ', level='ERROR')
+            return redirect(redirect_url)
+
+        payload = {
+            'trigger': 'test',
+            'source':  'django_admin',
+            'message': 'Test push from Django Admin',
+            'test':    True,
+        }
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        req  = urllib.request.Request(
+            url, data=body,
+            headers={'Content-Type': 'application/json; charset=utf-8'},
+            method='POST',
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=cfg.push_timeout) as resp:
+                status = resp.status
+            self.message_user(request, f'✅ Test push สำเร็จ! HTTP {status} → {url}')
+        except Exception as exc:
+            self.message_user(request, f'❌ Test push ล้มเหลว: {exc}', level='ERROR')
+
+        return redirect(redirect_url)
+
+    # ── Test push button (readonly field rendered inside the form) ─
+
+    def test_push_button(self, obj):
+        if not obj or not obj.pk:
+            return '-'
+        url = reverse('admin:n8npushsettings_run_test', args=[obj.pk])
+        return format_html(
+            '<a href="{}" class="button" '
+            'style="display:inline-block;padding:6px 16px;background:#17a2b8;'
+            'color:#fff;border-radius:4px;text-decoration:none;'
+            'font-size:13px;font-weight:bold;">'
+            '🧪 Test Push</a>',
+            url,
+        )
+    test_push_button.short_description = ''
+
+    # ── Changelist badges ─────────────────────────────────────────
+
+    def enabled_badge(self, obj):
+        if obj.is_enabled:
+            return format_html('<span style="background:#28a745;color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:bold;">✅ เปิด</span>')
+        return format_html('<span style="background:#dc3545;color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:bold;">❌ ปิด</span>')
+    enabled_badge.short_description = 'สถานะ'
+
+    def webhook_badge(self, obj):
+        if not obj.webhook_snapshot:
+            return format_html('<span style="color:#adb5bd;">— ยังไม่ตั้งค่า —</span>')
+        short = obj.webhook_snapshot[:55] + '…' if len(obj.webhook_snapshot) > 55 else obj.webhook_snapshot
+        return format_html('<code style="font-size:11px;color:#0d6efd;">{}</code>', short)
+    webhook_badge.short_description = 'Snapshot Webhook URL'
+
+    def last_push_badge(self, obj):
+        if not obj.last_push_at:
+            return format_html('<span style="color:#adb5bd;">—</span>')
+        local = timezone.localtime(obj.last_push_at).strftime('%d/%m %H:%M')
+        if obj.last_push_ok:
+            return format_html('<span style="color:#28a745;font-size:12px;">✅ {}</span>', local)
+        return format_html('<span style="color:#dc3545;font-size:12px;" title="{}">❌ {}</span>', obj.last_push_msg or '', local)
+    last_push_badge.short_description = 'Push ล่าสุด'

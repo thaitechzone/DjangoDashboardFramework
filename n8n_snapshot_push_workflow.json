@@ -1,0 +1,251 @@
+{
+  "name": "IoT Dashboard — N8N Snapshot Push (Single Webhook)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "iot-snapshot",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-snapshot",
+      "name": "Webhook: IoT Snapshot",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 400],
+      "webhookId": "iot-snapshot",
+      "notes": "Single endpoint — Django pushes ALL events here\nSet in .env: N8N_WEBHOOK_SNAPSHOT=http://YOUR_N8N:5678/webhook/iot-snapshot"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"received\":true,\"trigger\":\"{{ $json.body.trigger }}\"}",
+        "options": {}
+      },
+      "id": "respond-ok",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [460, 280],
+      "notes": "ตอบกลับ Django ทันที (non-blocking) ก่อน process ต่อ"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════════════════════════════\n// Parse IoT Snapshot — build alerts + summary message\n// ═══════════════════════════════════════════════════════════════\nconst body = $input.first().json.body;\nconst trigger   = body.trigger   || 'unknown';\nconst ts        = body.timestamp || '';\nconst weather   = body.weather_latest   || {};\nconst sensor    = body.sensor_latest    || {};\nconst relay     = body.relay_status     || {};\nconst alarm     = body.alarm            || {};\nconst ai        = body.ai_latest        || {};\nconst td        = body.trigger_data     || {};\n\nconst alerts = [];\n\n// ── Critical: Alarm ────────────────────────────────────────────\nif (alarm.active) {\n  alerts.push({ level: 'CRITICAL', msg: `🚨 ALARM ACTIVATED\\nReason: ${alarm.reason}` });\n}\n\n// ── Relay change ───────────────────────────────────────────────\nif (trigger === 'relay') {\n  const icon = td.new_state === 'ON' ? '🟢' : '🔴';\n  const srcMap = { mqtt:'ESP32', ai_agent:'AI Agent', threshold:'Auto-Threshold', dashboard:'Dashboard' };\n  alerts.push({ level: 'INFO', msg: `${icon} Relay ${td.relay_number}: ${td.old_state} → ${td.new_state}\\nSource: ${srcMap[td.source]||td.source}\\nReason: ${td.reason||'-'}` });\n}\n\n// ── Alarm event ─────────────────────────────────────────────────\nif (trigger === 'alarm') {\n  const icon = td.alarm_active ? '🚨' : '✅';\n  alerts.push({ level: td.alarm_active ? 'CRITICAL' : 'INFO', msg: `${icon} Alarm ${td.alarm_state}\\n${td.reason||''}` });\n}\n\n// ── AI decision ─────────────────────────────────────────────────\nif (trigger === 'ai') {\n  const icon = td.decision === 'on' ? '✅' : '🛑';\n  alerts.push({ level: 'INFO', msg: `🤖 AI: Relay ${td.relay_number} → ${td.command} (${icon} ${td.decision?.toUpperCase()})\\nConfidence: ${td.confidence_pct}%\\n${td.reasoning_summary||''}` });\n}\n\n// ── Weather thresholds ──────────────────────────────────────────\nif ((weather.rain_probability || 0) >= 70)\n  alerts.push({ level: 'WARNING', msg: `🌧 Rain: ${weather.rain_probability}% — Consider closing the greenhouse` });\nif ((weather.temperature || 0) >= 38)\n  alerts.push({ level: 'WARNING', msg: `🌡 Outdoor Temp: ${weather.temperature}°C` });\nif ((weather.aqi || 0) >= 4)\n  alerts.push({ level: 'WARNING', msg: `🏭 AQI ${weather.aqi} (${weather.aqi_label}) — PM2.5: ${weather.pm2_5} μg/m³` });\n\n// ── Sensor thresholds ───────────────────────────────────────────\nif ((sensor.temperature || 0) >= 35)\n  alerts.push({ level: 'WARNING', msg: `🌡 Indoor Temp: ${sensor.temperature}°C` });\nif ((sensor.humidity || 0) >= 90)\n  alerts.push({ level: 'WARNING', msg: `💧 Humidity: ${sensor.humidity}%` });\n\n// ── Full summary message ─────────────────────────────────────────\nconst summaryLines = [\n  `📡 IoT Snapshot [${trigger.toUpperCase()}] — ${ts}`,\n  '',\n];\n\nif (weather.city_name) {\n  summaryLines.push(\n    `🌤 Weather: ${weather.weather_desc} | ${weather.temperature}°C (feels ${weather.feels_like}°C)`,\n    `   Hum: ${weather.humidity}% | Wind: ${weather.wind_speed}m/s | Rain: ${weather.rain_probability}%`,\n    `   AQI: ${weather.aqi} (${weather.aqi_label}) | PM2.5: ${weather.pm2_5} μg/m³`,\n  );\n}\n\nif (sensor.device_name) {\n  summaryLines.push(\n    ``,\n    `🌡 Sensor (${sensor.device_name})`,\n    `   Temp: ${sensor.temperature}°C | Hum: ${sensor.humidity}% | DS18B20: ${sensor.ds18b20}°C`,\n  );\n}\n\nsummaryLines.push(\n  ``,\n  `🔌 Relay: R1=${relay.relay1?'ON':'OFF'} R2=${relay.relay2?'ON':'OFF'} R3=${relay.relay3?'ON':'OFF'}`,\n  `🤖 AI: ${ai.decision?.toUpperCase()||'N/A'} (${ai.confidence_pct||0}%)`,\n  `🚨 Alarm: ${alarm.active ? 'ACTIVE — '+alarm.reason : 'Normal'}`,\n);\n\nif (alerts.length) {\n  summaryLines.push('', '⚠️ Alerts:', ...alerts.map(a => `  [${a.level}] ${a.msg}`));\n}\n\nreturn [{\n  json: {\n    trigger,\n    has_alerts:      alerts.length > 0,\n    highest_level:   alerts.some(a=>a.level==='CRITICAL') ? 'CRITICAL'\n                   : alerts.some(a=>a.level==='WARNING')  ? 'WARNING' : 'INFO',\n    alerts,\n    summary_message: summaryLines.join('\\n'),\n    // pass raw sections downstream\n    weather, sensor, relay, alarm, ai, trigger_data: td, timestamp: ts,\n  }\n}];\n"
+      },
+      "id": "parse-snapshot",
+      "name": "Parse Snapshot + Build Alerts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 480]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "has-alert",
+              "leftValue": "={{ $json.has_alerts }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "or"
+        }
+      },
+      "id": "if-has-alerts",
+      "name": "Has Alerts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 480]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-critical",
+              "leftValue": "={{ $json.highest_level }}",
+              "rightValue": "CRITICAL",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "or"
+        }
+      },
+      "id": "if-critical",
+      "name": "Is CRITICAL?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [920, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://notify-api.line.me/api/notify",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/x-www-form-urlencoded" }]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [{ "name": "message", "value": "={{ $json.summary_message }}" }]
+        },
+        "options": {}
+      },
+      "id": "line-critical",
+      "name": "LINE Notify — Critical 🚨",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1140, 300],
+      "notes": "Credential: HTTP Header Auth\nAuthorization = Bearer <YOUR_LINE_TOKEN>"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://notify-api.line.me/api/notify",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/x-www-form-urlencoded" }]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [{ "name": "message", "value": "={{ $json.summary_message }}" }]
+        },
+        "options": {}
+      },
+      "id": "line-warning",
+      "name": "LINE Notify — Warning ⚠️",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1140, 460],
+      "notes": "Same LINE token — warnings only (not critical)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-weather",
+              "leftValue": "={{ $json.trigger }}",
+              "rightValue": "weather",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "or"
+        }
+      },
+      "id": "if-weather-trigger",
+      "name": "Is Weather Trigger?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 640]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Weather Log", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp":        "={{ $json.timestamp }}",
+            "trigger":          "={{ $json.trigger }}",
+            "outdoor_temp":     "={{ $json.weather.temperature }}",
+            "outdoor_hum":      "={{ $json.weather.humidity }}",
+            "rain_prob":        "={{ $json.weather.rain_probability }}",
+            "aqi":              "={{ $json.weather.aqi }}",
+            "aqi_label":        "={{ $json.weather.aqi_label }}",
+            "weather_desc":     "={{ $json.weather.weather_desc }}",
+            "indoor_temp":      "={{ $json.sensor.temperature }}",
+            "indoor_hum":       "={{ $json.sensor.humidity }}",
+            "ds18b20":          "={{ $json.sensor.ds18b20 }}",
+            "relay1":           "={{ $json.relay.relay1 }}",
+            "relay2":           "={{ $json.relay.relay2 }}",
+            "alarm_active":     "={{ $json.alarm.active }}",
+            "ai_decision":      "={{ $json.ai.decision }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "gsheets-log",
+      "name": "Google Sheets — Log Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [920, 580],
+      "notes": "Logs every weather event (every 15 min) to Google Sheets\nReplace YOUR_GOOGLE_SHEET_ID"
+    }
+  ],
+  "connections": {
+    "Webhook: IoT Snapshot": {
+      "main": [[
+        { "node": "Respond 200",                 "type": "main", "index": 0 },
+        { "node": "Parse Snapshot + Build Alerts","type": "main", "index": 0 }
+      ]]
+    },
+    "Parse Snapshot + Build Alerts": {
+      "main": [[
+        { "node": "Has Alerts?",          "type": "main", "index": 0 },
+        { "node": "Is Weather Trigger?",  "type": "main", "index": 0 }
+      ]]
+    },
+    "Has Alerts?": {
+      "main": [
+        [{ "node": "Is CRITICAL?", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Is CRITICAL?": {
+      "main": [
+        [{ "node": "LINE Notify — Critical 🚨", "type": "main", "index": 0 }],
+        [{ "node": "LINE Notify — Warning ⚠️",  "type": "main", "index": 0 }]
+      ]
+    },
+    "Is Weather Trigger?": {
+      "main": [
+        [{ "node": "Google Sheets — Log Row", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "IoT" }, { "name": "Snapshot" }, { "name": "Push" }],
+  "__meta": {
+    "_comment": "=== HOW TO USE — Single Snapshot Webhook ===",
+    "_step1": "N8N → Settings → Import Workflow → เลือกไฟล์นี้",
+    "_step2": "แก้ .env บน Django server:",
+    "_step2a": "  N8N_PUSH_ENABLED=true",
+    "_step2b": "  N8N_WEBHOOK_SNAPSHOT=http://YOUR_N8N_IP:5678/webhook/iot-snapshot",
+    "_step3": "สร้าง LINE Notify credential ใน N8N (HTTP Header Auth): Authorization = Bearer <token>",
+    "_step4": "ถ้าใช้ Google Sheets: สร้าง credential และแก้ YOUR_GOOGLE_SHEET_ID",
+    "_step5": "Activate webhook node แล้ว restart Django",
+    "_payload_structure": {
+      "event":         "snapshot  (always)",
+      "trigger":       "sensor | relay | alarm | ai | weather  (what triggered this push)",
+      "trigger_data":  "minimal data of the triggering event",
+      "timestamp":     "Bangkok time string",
+      "sensor_latest": "{ device_name, temperature, humidity, ds18b20, timestamp }",
+      "relay_status":  "{ relay1, relay2, relay3, last_updated }",
+      "alarm":         "{ active, reason, mode, last_triggered }",
+      "ai_latest":     "{ decision, confidence_pct, reasoning_summary, relay_status, command_sent, timestamp }",
+      "weather_latest":"{ city_name, temperature, feels_like, humidity, pressure, wind_speed, clouds, weather_main, weather_desc, rain_probability, aqi, aqi_label, pm2_5, pm10, timestamp }"
+    },
+    "_alert_routing": {
+      "CRITICAL": "alarm.active=true → LINE Notify (urgent channel)",
+      "WARNING":  "rain≥70% or temp≥38°C or AQI≥4 or indoor overrange → LINE Notify",
+      "INFO":     "relay change / AI decision → no notification (logged only)",
+      "log_row":  "every weather trigger (15 min) → Google Sheets append"
+    }
+  }
+}

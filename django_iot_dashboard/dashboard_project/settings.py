@@ -136,6 +136,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 N8N_PUSH_ENABLED  = os.getenv('N8N_PUSH_ENABLED',  'false')
 N8N_PUSH_TIMEOUT  = os.getenv('N8N_PUSH_TIMEOUT',  '5')
 
+# Primary: single snapshot endpoint (all-in-one)
+N8N_WEBHOOK_SNAPSHOT = os.getenv('N8N_WEBHOOK_SNAPSHOT', '')
+
+# Optional: individual endpoints (kept for backward compatibility)
 N8N_WEBHOOK_SENSOR  = os.getenv('N8N_WEBHOOK_SENSOR',  '')
 N8N_WEBHOOK_RELAY   = os.getenv('N8N_WEBHOOK_RELAY',   '')
 N8N_WEBHOOK_ALARM   = os.getenv('N8N_WEBHOOK_ALARM',   '')

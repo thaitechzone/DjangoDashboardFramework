@@ -26,10 +26,16 @@ import json
 import logging
 import os
 import threading
+import time
 import urllib.request
 import urllib.error
 
 logger = logging.getLogger(__name__)
+
+# ─── rate limiter (in-memory, persists for process lifetime) ─────────────────
+# _last_push[trigger] = monotonic timestamp of the last successful push dispatch
+_last_push: dict = {}
+_push_lock = threading.Lock()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Config helpers
@@ -44,7 +50,19 @@ def _get_env(key: str, default: str = '') -> str:
         return os.getenv(key, default)
 
 
+def _get_db_settings():
+    """ดึง N8NPushSettings จาก DB (คืน None ถ้า DB ยังไม่พร้อม)"""
+    try:
+        from iot_dashboard.models import N8NPushSettings
+        return N8NPushSettings.get_settings()
+    except Exception:
+        return None
+
+
 def is_enabled() -> bool:
+    cfg = _get_db_settings()
+    if cfg is not None:
+        return cfg.is_enabled
     return _get_env('N8N_PUSH_ENABLED', 'false').lower() in ('1', 'true', 'yes')
 
 
@@ -251,7 +269,36 @@ def push_snapshot(trigger: str, trigger_data: dict = None):
     if not is_enabled():
         return
 
-    url = _get_env('N8N_WEBHOOK_SNAPSHOT', '')
+    cfg = _get_db_settings()
+    if cfg is not None:
+        url = cfg.webhook_snapshot.strip()
+        # ตรวจ trigger filter
+        _TRIGGER_FLAGS = {
+            'sensor':  'push_on_sensor',
+            'relay':   'push_on_relay',
+            'alarm':   'push_on_alarm',
+            'ai':      'push_on_ai',
+            'weather': 'push_on_weather',
+        }
+        flag = _TRIGGER_FLAGS.get(trigger)
+        if flag and not getattr(cfg, flag, True):
+            logger.debug(f"⏭️  N8N snapshot push skipped: {flag}=False (trigger='{trigger}')")
+            return
+        # ตรวจ global rate limit — ทุก trigger ใช้ cooldown ร่วมกัน
+        min_interval = getattr(cfg, 'push_min_interval', 30)
+        if min_interval > 0:
+            with _push_lock:
+                elapsed = time.monotonic() - _last_push.get('_global', 0)
+                if elapsed < min_interval:
+                    logger.debug(
+                        f"⏱️  N8N snapshot skipped (global cooldown): trigger='{trigger}' "
+                        f"elapsed={elapsed:.0f}s < {min_interval}s"
+                    )
+                    return
+                _last_push['_global'] = time.monotonic()
+    else:
+        url = _get_env('N8N_WEBHOOK_SNAPSHOT', '')
+
     if not url:
         logger.debug("⏭️  N8N snapshot push skipped: N8N_WEBHOOK_SNAPSHOT not configured")
         return
@@ -335,11 +382,30 @@ def push_snapshot(trigger: str, trigger_data: dict = None):
                 } if weather else None,
             }
 
-            _do_push(url, payload)
-            logger.debug(f"✅ N8N snapshot push sent: trigger='{trigger}'")
+            # ─ do push ─
+            ok = True
+            msg = ''
+            try:
+                _do_push(url, payload)
+                logger.debug(f"✅ N8N snapshot push sent: trigger='{trigger}'")
+            except Exception as push_err:
+                ok = False
+                msg = str(push_err)[:500]
+                logger.error(f"❌ N8N snapshot push error (trigger='{trigger}'): {push_err}")
+
+            # ─ update last_push status in DB ─
+            try:
+                from iot_dashboard.models import N8NPushSettings
+                N8NPushSettings.objects.filter(pk=1).update(
+                    last_push_at=now,
+                    last_push_ok=ok,
+                    last_push_msg=msg,
+                )
+            except Exception:
+                pass
 
         except Exception as e:
-            logger.error(f"❌ N8N snapshot push error (trigger='{trigger}'): {e}")
+            logger.error(f"❌ N8N snapshot build error (trigger='{trigger}'): {e}")
 
     t = threading.Thread(
         target=_build_and_push,

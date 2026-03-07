@@ -854,3 +854,81 @@ class WeatherLog(models.Model):
             pm2_5           = weather_data.get('pm2_5'),
             pm10            = weather_data.get('pm10'),
         )
+
+
+class N8NPushSettings(models.Model):
+    """
+    ตั้งค่า N8N Push Webhook (singleton — มีแค่ 1 record)
+    แทนการแก้ .env ไฟล์โดยตรง
+    """
+    is_enabled = models.BooleanField(
+        default=False,
+        verbose_name='เปิดใช้งาน N8N Push',
+        help_text='เปิดเพื่อให้ Django ส่ง event ไปยัง N8N ทุกครั้งที่มีข้อมูลใหม่'
+    )
+    webhook_snapshot = models.URLField(
+        max_length=500, blank=True, default='',
+        verbose_name='Snapshot Webhook URL',
+        help_text='ตัวอย่าง: http://192.168.1.100:5678/webhook/iot-snapshot — '
+                  'URL นี้เป็น endpoint เดียวที่ใช้ (ส่งทุก event รวมกัน)'
+    )
+    push_timeout = models.PositiveIntegerField(
+        default=5,
+        verbose_name='HTTP Timeout (วินาที)',
+        help_text='รอ HTTP response นานสุดกี่วินาที — ถ้า N8N ไม่ตอบภายในเวลานี้จะถือว่า push ล้มเหลว (default 5)'
+    )
+    push_min_interval = models.PositiveIntegerField(
+        default=30,
+        verbose_name='ส่งได้ทุกกี่วินาที (Global Cooldown)',
+        help_text='รอขั้นต่ำกี่วินาทีระหว่างการ push แต่ละครั้ง (ทุก trigger ใช้ร่วมกัน) — '
+                  '30 = push ได้สูงสุดทุก 30 วินาที, 0 = ไม่จำกัด'
+    )
+
+    # ฟิลเตอร์ trigger (unchecked = ไม่ส่ง)
+    push_on_sensor = models.BooleanField(
+        default=True, verbose_name='ส่งเมื่อได้รับ Sensor data',
+        help_text='Push ทุกครั้งที่ ESP32 ส่ง DHT22/DS18B20 มา (บ่อยที่สุด)'
+    )
+    push_on_relay = models.BooleanField(
+        default=True, verbose_name='ส่งเมื่อ Relay เปลี่ยน',
+        help_text='Push เมื่อ relay state เปลี่ยนแปลง'
+    )
+    push_on_alarm = models.BooleanField(
+        default=True, verbose_name='ส่งเมื่อ Alarm เปลี่ยนสถานะ',
+        help_text='Push เมื่อ alarm activated / deactivated'
+    )
+    push_on_ai = models.BooleanField(
+        default=True, verbose_name='ส่งเมื่อ AI ตัดสินใจ',
+        help_text='Push ทุกครั้งที่ AI agent วิเคราะห์และส่งคำสั่ง'
+    )
+    push_on_weather = models.BooleanField(
+        default=True, verbose_name='ส่งเมื่อบันทึก Weather Log',
+        help_text='Push ทุก 15 นาทีเมื่อ weather logger บันทึก'
+    )
+
+    # สถานะล่าสุด (readonly)
+    last_push_at  = models.DateTimeField(null=True, blank=True, verbose_name='Push ล่าสุด')
+    last_push_ok  = models.BooleanField(null=True, blank=True, verbose_name='ผลล่าสุด')
+    last_push_msg = models.CharField(max_length=500, blank=True, verbose_name='ข้อความล่าสุด')
+
+    class Meta:
+        verbose_name = 'N8N Push Settings'
+        verbose_name_plural = 'N8N Push Settings'
+
+    def __str__(self):
+        status = '✅ เปิด' if self.is_enabled else '❌ ปิด'
+        url_short = (self.webhook_snapshot[:40] + '…') if len(self.webhook_snapshot) > 40 else (self.webhook_snapshot or '(ยังไม่ได้ตั้งค่า)')
+        return f'N8N Push [{status}] → {url_short}'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_settings(cls):
+        obj, _ = cls.objects.get_or_create(pk=1, defaults={
+            'is_enabled': False,
+            'webhook_snapshot': '',
+            'push_timeout': 5,
+        })
+        return obj
