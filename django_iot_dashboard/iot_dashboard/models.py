@@ -781,3 +781,76 @@ class AIDecisionLog(models.Model):
             'avg_confidence': avg_confidence,
             'daily_breakdown': daily_breakdown
         }
+
+
+class WeatherLog(models.Model):
+    """
+    บันทึกข้อมูลสภาพอากาศจาก OpenWeatherMap ทุก 15 นาที
+    สำหรับวิเคราะห์สภาพอากาศย้อนหลังใน Nakhon Si Thammarat
+    """
+    AQI_CHOICES = [
+        (1, 'Good'),
+        (2, 'Fair'),
+        (3, 'Moderate'),
+        (4, 'Poor'),
+        (5, 'Very Poor'),
+    ]
+
+    timestamp        = models.DateTimeField(default=timezone.now, db_index=True, verbose_name='เวลา')
+    city_name        = models.CharField(max_length=100, default='Nakhon Si Thammarat', verbose_name='เมือง')
+    location         = models.CharField(max_length=100, blank=True, verbose_name='Location String')
+
+    # อุณหภูมิ / ความชื้น
+    temperature      = models.FloatField(verbose_name='อุณหภูมิ (°C)')
+    feels_like       = models.FloatField(null=True, blank=True, verbose_name='รู้สึกเหมือน (°C)')
+    humidity         = models.IntegerField(verbose_name='ความชื้น (%)')
+    pressure         = models.IntegerField(null=True, blank=True, verbose_name='ความดันอากาศ (hPa)')
+
+    # ลม / เมฆ
+    wind_speed       = models.FloatField(null=True, blank=True, verbose_name='ความเร็วลม (m/s)')
+    wind_deg         = models.IntegerField(null=True, blank=True, verbose_name='ทิศลม (°)')
+    clouds           = models.IntegerField(null=True, blank=True, verbose_name='เมฆ (%)')
+
+    # สภาพอากาศ
+    weather_main    = models.CharField(max_length=50, blank=True, verbose_name='สภาพหลัก')   # Clear, Rain …
+    weather_desc    = models.CharField(max_length=100, blank=True, verbose_name='รายละเอียด') # light rain …
+    rain_probability = models.FloatField(null=True, blank=True, verbose_name='โอกาสฝน (%)')
+
+    # คุณภาพอากาศ
+    aqi             = models.IntegerField(null=True, blank=True, choices=AQI_CHOICES, verbose_name='AQI')
+    aqi_label       = models.CharField(max_length=20, blank=True, verbose_name='AQI Label')
+    pm2_5           = models.FloatField(null=True, blank=True, verbose_name='PM2.5 (μg/m³)')
+    pm10            = models.FloatField(null=True, blank=True, verbose_name='PM10 (μg/m³)')
+
+    class Meta:
+        verbose_name        = 'Weather Log'
+        verbose_name_plural = 'Weather Logs'
+        ordering            = ['-timestamp']
+        indexes             = [models.Index(fields=['-timestamp'])]
+
+    def __str__(self):
+        return (f"[{timezone.localtime(self.timestamp).strftime('%d/%m/%Y %H:%M')}] "
+                f"{self.city_name} — {self.temperature:.1f}°C, {self.humidity}%, "
+                f"{self.weather_desc or self.weather_main}")
+
+    @classmethod
+    def record_from_weather_data(cls, weather_data: dict) -> 'WeatherLog':
+        """สร้าง WeatherLog จาก dict ที่ได้จาก WeatherService.get_current_weather()"""
+        return cls.objects.create(
+            city_name       = weather_data.get('city_name', 'Nakhon Si Thammarat'),
+            location        = weather_data.get('location', ''),
+            temperature     = weather_data['temperature'],
+            feels_like      = weather_data.get('feels_like'),
+            humidity        = int(weather_data['humidity']),
+            pressure        = int(weather_data.get('pressure', 0)) or None,
+            wind_speed      = weather_data.get('wind_speed'),
+            wind_deg        = weather_data.get('wind_deg'),
+            clouds          = weather_data.get('clouds'),
+            weather_main    = weather_data.get('main', ''),
+            weather_desc    = weather_data.get('description', ''),
+            rain_probability= weather_data.get('rain_probability'),
+            aqi             = weather_data.get('aqi'),
+            aqi_label       = weather_data.get('aqi_label', ''),
+            pm2_5           = weather_data.get('pm2_5'),
+            pm10            = weather_data.get('pm10'),
+        )

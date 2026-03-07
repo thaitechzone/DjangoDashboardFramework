@@ -6,7 +6,7 @@ admin.site.unregister(Group)
 from django.utils.html import format_html, mark_safe
 from django.utils import timezone
 from django.db.models import Avg, Count
-from .models import Device, SensorData, Relay, RelayLog, RelaySettings, WeatherAPISettings, GeminiAISettings, DeviceConfig, ThresholdSetting, AIDecisionLog
+from .models import Device, SensorData, Relay, RelayLog, RelaySettings, WeatherAPISettings, GeminiAISettings, DeviceConfig, ThresholdSetting, AIDecisionLog, WeatherLog
 
 # ─────────────────────────────────────────────
 #  Admin Site Customization
@@ -1392,3 +1392,306 @@ class DeviceConfigAdmin(admin.ModelAdmin):
             '<table style="border-collapse:collapse;font-size:12px;">{}</table>', rows
         )
     all_topics_display.short_description = 'MQTT Topics'
+
+
+# ─────────────────────────────────────────────
+#  Weather Log  (Nakhon Si Thammarat — ทุก 15 นาที)
+# ─────────────────────────────────────────────
+@admin.register(WeatherLog)
+class WeatherLogAdmin(admin.ModelAdmin):
+    list_display  = (
+        'timestamp_th', 'city_badge', 'temperature_badge', 'feels_like_badge',
+        'humidity_badge', 'wind_badge', 'clouds_badge',
+        'weather_badge', 'rain_prob_badge', 'aqi_badge',
+    )
+    list_display_links = ('timestamp_th',)
+    list_filter   = ('weather_main', 'aqi', 'city_name')
+    search_fields = ('weather_main', 'weather_desc', 'city_name')
+    date_hierarchy  = 'timestamp'
+    ordering = ('-timestamp',)
+    list_per_page = 96   # 96 rows ≈ 1 วัน (15 นาที × 96 = 24 ชม.)
+    show_full_result_count = False
+    actions = [
+        'delete_selected_logs',
+        'delete_older_than_7days', 'delete_older_than_30days', 'delete_all',
+        'export_excel', 'export_json',
+        'fetch_now',
+    ]
+
+    readonly_fields = (
+        'timestamp', 'city_name', 'location',
+        'temperature', 'feels_like', 'humidity', 'pressure',
+        'wind_speed', 'wind_deg', 'clouds',
+        'weather_main', 'weather_desc', 'rain_probability',
+        'aqi', 'aqi_label', 'pm2_5', 'pm10',
+    )
+
+    class Media:
+        css = {'all': ('iot_dashboard/admin_custom.css',)}
+
+    fieldsets = (
+        ('🕐 เวลา & ที่ตั้ง', {
+            'fields': ('timestamp', 'city_name', 'location'),
+        }),
+        ('🌡️ อุณหภูมิ & ความชื้น', {
+            'fields': ('temperature', 'feels_like', 'humidity', 'pressure'),
+        }),
+        ('💨 ลม & เมฆ', {
+            'fields': ('wind_speed', 'wind_deg', 'clouds'),
+        }),
+        ('🌤️ สภาพอากาศ', {
+            'fields': ('weather_main', 'weather_desc', 'rain_probability'),
+        }),
+        ('🏭 คุณภาพอากาศ (AQI)', {
+            'fields': ('aqi', 'aqi_label', 'pm2_5', 'pm10'),
+        }),
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    # ── List columns ──────────────────────────────────────────────
+
+    def timestamp_th(self, obj):
+        return format_html(
+            '<span style="white-space:nowrap;font-size:12px;color:#495057;">{}</span>',
+            timezone.localtime(obj.timestamp).strftime('%d/%m/%Y %H:%M'),
+        )
+    timestamp_th.short_description = 'เวลา'
+    timestamp_th.admin_order_field = 'timestamp'
+
+    def city_badge(self, obj):
+        return format_html(
+            '<span style="font-size:12px;color:#0d6efd;font-weight:bold;white-space:nowrap;">'
+            '📍 {}</span>', obj.city_name
+        )
+    city_badge.short_description = 'เมือง'
+
+    def temperature_badge(self, obj):
+        t = obj.temperature
+        color = '#dc3545' if t >= 35 else ('#fd7e14' if t >= 30 else '#28a745')
+        icon  = '🔥' if t >= 35 else ('☀️' if t >= 30 else '🌡️')
+        return format_html(
+            '<span style="color:{};font-weight:bold;white-space:nowrap;">{} {}°C</span>',
+            color, icon, f'{t:.1f}',
+        )
+    temperature_badge.short_description = 'อุณหภูมิ'
+    temperature_badge.admin_order_field = 'temperature'
+
+    def feels_like_badge(self, obj):
+        if obj.feels_like is None:
+            return format_html('<span style="color:#ccc;">—</span>')
+        return format_html(
+            '<span style="font-size:12px;color:#6c757d;white-space:nowrap;">~{}°C</span>',
+            f'{obj.feels_like:.1f}',
+        )
+    feels_like_badge.short_description = 'รู้สึก'
+    feels_like_badge.admin_order_field = 'feels_like'
+
+    def humidity_badge(self, obj):
+        h = obj.humidity
+        color = '#17a2b8' if h >= 80 else ('#28a745' if h >= 50 else '#fd7e14')
+        icon  = '💧' if h >= 80 else ('💦' if h >= 50 else '🏜️')
+        return format_html(
+            '<span style="color:{};font-weight:bold;white-space:nowrap;">{} {}%</span>',
+            color, icon, h,
+        )
+    humidity_badge.short_description = 'ความชื้น'
+    humidity_badge.admin_order_field = 'humidity'
+
+    def wind_badge(self, obj):
+        if obj.wind_speed is None:
+            return format_html('<span style="color:#ccc;">—</span>')
+        return format_html(
+            '<span style="font-size:12px;white-space:nowrap;">💨 {} m/s</span>',
+            f'{obj.wind_speed:.1f}',
+        )
+    wind_badge.short_description = 'ลม'
+    wind_badge.admin_order_field = 'wind_speed'
+
+    def clouds_badge(self, obj):
+        if obj.clouds is None:
+            return format_html('<span style="color:#ccc;">—</span>')
+        icon = '⛅' if obj.clouds >= 50 else ('🌤️' if obj.clouds >= 20 else '☀️')
+        return format_html(
+            '<span style="font-size:12px;white-space:nowrap;">{} {}%</span>',
+            icon, obj.clouds,
+        )
+    clouds_badge.short_description = 'เมฆ'
+    clouds_badge.admin_order_field = 'clouds'
+
+    _WEATHER_ICONS = {
+        'Clear':        '☀️',
+        'Clouds':       '☁️',
+        'Rain':         '🌧️',
+        'Drizzle':      '🌦️',
+        'Thunderstorm': '⛈️',
+        'Snow':         '❄️',
+        'Mist':         '🌫️',
+        'Fog':          '🌫️',
+        'Haze':         '🌫️',
+        'Smoke':        '💨',
+    }
+
+    def weather_badge(self, obj):
+        icon = self._WEATHER_ICONS.get(obj.weather_main, '🌡️')
+        desc = (obj.weather_desc or obj.weather_main).capitalize()
+        return format_html(
+            '<span style="font-size:12px;white-space:nowrap;">{} {}</span>',
+            icon, desc,
+        )
+    weather_badge.short_description = 'สภาพอากาศ'
+    weather_badge.admin_order_field = 'weather_main'
+
+    def rain_prob_badge(self, obj):
+        if obj.rain_probability is None:
+            return format_html('<span style="color:#ccc;">—</span>')
+        pct = obj.rain_probability
+        color = '#dc3545' if pct >= 70 else ('#fd7e14' if pct >= 40 else '#28a745')
+        return format_html(
+            '<span style="color:{};font-weight:bold;white-space:nowrap;">🌂 {}%</span>',
+            color, f'{pct:.0f}',
+        )
+    rain_prob_badge.short_description = 'โอกาสฝน'
+    rain_prob_badge.admin_order_field = 'rain_probability'
+
+    _AQI_COLORS = {
+        1: ('#155724', '#d4edda', 'Good'),
+        2: ('#1b4f72', '#d6eaf8', 'Fair'),
+        3: ('#856404', '#fff3cd', 'Moderate'),
+        4: ('#7d3c15', '#fde8d8', 'Poor'),
+        5: ('#721c24', '#f8d7da', 'Very Poor'),
+    }
+
+    def aqi_badge(self, obj):
+        if obj.aqi is None:
+            return format_html('<span style="color:#ccc;">—</span>')
+        fg, bg, label = self._AQI_COLORS.get(obj.aqi, ('#495057', '#e9ecef', obj.aqi_label or str(obj.aqi)))
+        pm = f' | PM2.5: {obj.pm2_5:.1f}' if obj.pm2_5 is not None else ''
+        return format_html(
+            '<span style="display:inline-block;padding:2px 8px;border-radius:12px;'
+            'background:{};color:{};font-size:12px;font-weight:bold;white-space:nowrap;">'
+            'AQI {} {}{}</span>',
+            bg, fg, str(obj.aqi), label, pm,
+        )
+    aqi_badge.short_description = 'AQI / PM2.5'
+    aqi_badge.admin_order_field = 'aqi'
+
+    # ── Actions ──────────────────────────────────────────────────
+
+    @admin.action(description='🗑️ ลบ Weather Log ที่เลือก')
+    def delete_selected_logs(self, request, queryset):
+        count = queryset.count()
+        queryset.delete()
+        self.message_user(request, f'✅ ลบ Weather Log {count} รายการสำเร็จ')
+
+    @admin.action(description='📅 ลบข้อมูลเก่ากว่า 7 วัน')
+    def delete_older_than_7days(self, request, queryset):
+        from datetime import timedelta
+        cutoff = timezone.now() - timedelta(days=7)
+        count, _ = WeatherLog.objects.filter(timestamp__lt=cutoff).delete()
+        self.message_user(request, f'✅ ลบข้อมูลเก่ากว่า 7 วัน จำนวน {count} รายการสำเร็จ')
+
+    @admin.action(description='📅 ลบข้อมูลเก่ากว่า 30 วัน')
+    def delete_older_than_30days(self, request, queryset):
+        from datetime import timedelta
+        cutoff = timezone.now() - timedelta(days=30)
+        count, _ = WeatherLog.objects.filter(timestamp__lt=cutoff).delete()
+        self.message_user(request, f'✅ ลบข้อมูลเก่ากว่า 30 วัน จำนวน {count} รายการสำเร็จ')
+
+    @admin.action(description='⚠️ ลบ Weather Log ทั้งหมด')
+    def delete_all(self, request, queryset):
+        count, _ = WeatherLog.objects.all().delete()
+        self.message_user(request, f'✅ ลบ Weather Log ทั้งหมด {count} รายการสำเร็จ')
+
+    @admin.action(description='📊 Export เป็น Excel (.xlsx)')
+    def export_excel(self, request, queryset):
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from django.http import HttpResponse
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'WeatherLog'
+        headers = [
+            'ID', 'เวลา (Asia/Bangkok)', 'เมือง',
+            'อุณหภูมิ (°C)', 'รู้สึกเหมือน (°C)', 'ความชื้น (%)', 'ความดัน (hPa)',
+            'ลม (m/s)', 'ทิศลม (°)', 'เมฆ (%)',
+            'สภาพหลัก', 'รายละเอียด', 'โอกาสฝน (%)',
+            'AQI', 'AQI Label', 'PM2.5 (μg/m³)', 'PM10 (μg/m³)',
+        ]
+        ws.append(headers)
+        hdr_fill = PatternFill('solid', fgColor='1565C0')
+        hdr_font = Font(bold=True, color='FFFFFF')
+        for cell in ws[1]:
+            cell.fill = hdr_fill
+            cell.font = hdr_font
+            cell.alignment = Alignment(horizontal='center')
+
+        for obj in queryset.order_by('-timestamp'):
+            local_dt = timezone.localtime(obj.timestamp).strftime('%d/%m/%Y %H:%M')
+            ws.append([
+                obj.pk, local_dt, obj.city_name,
+                obj.temperature, obj.feels_like, obj.humidity, obj.pressure,
+                obj.wind_speed, obj.wind_deg, obj.clouds,
+                obj.weather_main, obj.weather_desc, obj.rain_probability,
+                obj.aqi, obj.aqi_label, obj.pm2_5, obj.pm10,
+            ])
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 3, 30)
+
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename="weather_log.xlsx"'
+        wb.save(response)
+        return response
+
+    @admin.action(description='📋 Export เป็น JSON (.json)')
+    def export_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        rows = []
+        for obj in queryset.order_by('-timestamp'):
+            rows.append({
+                'id':               obj.pk,
+                'timestamp':        timezone.localtime(obj.timestamp).strftime('%Y-%m-%d %H:%M'),
+                'city_name':        obj.city_name,
+                'temperature':      obj.temperature,
+                'feels_like':       obj.feels_like,
+                'humidity':         obj.humidity,
+                'pressure':         obj.pressure,
+                'wind_speed':       obj.wind_speed,
+                'wind_deg':         obj.wind_deg,
+                'clouds':           obj.clouds,
+                'weather_main':     obj.weather_main,
+                'weather_desc':     obj.weather_desc,
+                'rain_probability': obj.rain_probability,
+                'aqi':              obj.aqi,
+                'aqi_label':        obj.aqi_label,
+                'pm2_5':            obj.pm2_5,
+                'pm10':             obj.pm10,
+            })
+        content = json.dumps(rows, ensure_ascii=False, indent=2)
+        response = HttpResponse(content, content_type='application/json; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="weather_log.json"'
+        return response
+
+    @admin.action(description='🌤️ ดึงข้อมูลสภาพอากาศตอนนี้ (Manual Fetch)')
+    def fetch_now(self, request, queryset):
+        """บันทึกข้อมูลสภาพอากาศปัจจุบันทันที (ไม่ต้องรอ 15 นาที)"""
+        try:
+            from iot_dashboard.ai_agent.scheduler import get_scheduler
+            result = get_scheduler().trigger_manual_weather_log()
+            if result['success']:
+                self.message_user(request, f'✅ {result["message"]}')
+            else:
+                self.message_user(request, f'❌ {result["message"]}', level='ERROR')
+        except Exception as e:
+            self.message_user(request, f'❌ เกิดข้อผิดพลาด: {e}', level='ERROR')

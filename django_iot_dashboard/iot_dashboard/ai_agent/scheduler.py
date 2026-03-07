@@ -17,8 +17,10 @@ from .gemini_agent import GeminiRelayAgent
 logger = logging.getLogger(__name__)
 
 class AIAgentScheduler:
-    """Scheduler for periodic AI analysis"""
+    """Scheduler for periodic AI analysis and weather logging"""
     
+    WEATHER_LOG_INTERVAL_MINUTES = 15  # บันทึกสภาพอากาศทุกๆ 15 นาที
+
     def __init__(self):
         self.scheduler = BackgroundScheduler()
         self.weather_service = WeatherService()
@@ -42,7 +44,7 @@ class AIAgentScheduler:
             # Delay first run by 60s to avoid DB access during app initialization (AppConfig.ready())
             first_run_time = datetime.now() + timedelta(seconds=60)
 
-            # Add job to run every N minutes
+            # Job 1: AI analysis + relay control (configurable interval)
             self.scheduler.add_job(
                 func=self.analyze_and_control,
                 trigger=IntervalTrigger(minutes=self.interval_minutes, start_date=first_run_time),
@@ -50,12 +52,26 @@ class AIAgentScheduler:
                 name='AI Weather Analysis and Relay Control',
                 replace_existing=True
             )
+
+            # Job 2: Weather log every 15 minutes (independent of AI interval)
+            weather_log_start = datetime.now() + timedelta(seconds=90)
+            self.scheduler.add_job(
+                func=self.log_weather,
+                trigger=IntervalTrigger(
+                    minutes=self.WEATHER_LOG_INTERVAL_MINUTES,
+                    start_date=weather_log_start,
+                ),
+                id='weather_logger',
+                name='Weather Logger (Nakhon Si Thammarat — every 15 min)',
+                replace_existing=True,
+            )
             
             self.scheduler.start()
             self.is_running = True
             
             logger.info(f"✅ AI Agent Scheduler started successfully!")
             logger.info(f"🕐 Analysis interval: Every {self.interval_minutes} minutes")
+            logger.info(f"🌤️ Weather log interval: Every {self.WEATHER_LOG_INTERVAL_MINUTES} minutes")
             logger.info(f"⏳ First analysis scheduled at: {first_run_time.strftime('%H:%M:%S')} (60s delay)")
             
         except Exception as e:
@@ -73,6 +89,27 @@ class AIAgentScheduler:
         except Exception as e:
             logger.error(f"❌ Error stopping AI Agent Scheduler: {e}")
     
+    def log_weather(self):
+        """
+        บันทึกข้อมูลสภาพอากาศ Nakhon Si Thammarat ลงฐานข้อมูลทุก 15 นาที
+        ทำงานแยกต่างหากจาก AI analysis เพื่อให้ข้อมูลสมบูรณ์เสมอ
+        """
+        logger.info("🌤️ Weather logger: fetching current weather...")
+        try:
+            from iot_dashboard.models import WeatherLog
+            weather_data = self.weather_service.get_current_weather()
+            if not weather_data:
+                logger.warning("⚠️ Weather logger: no data returned, skip")
+                return
+            entry = WeatherLog.record_from_weather_data(weather_data)
+            logger.info(
+                f"✅ WeatherLog saved [id={entry.pk}] "
+                f"{entry.city_name} {entry.temperature:.1f}°C {entry.humidity}% "
+                f"{entry.weather_desc} AQI={entry.aqi_label or '-'}"
+            )
+        except Exception as e:
+            logger.error(f"❌ Weather logger error: {e}", exc_info=True)
+
     def analyze_and_control(self):
         """
         Main analysis function:
@@ -178,6 +215,16 @@ class AIAgentScheduler:
                 'success': False,
                 'message': str(e)
             }
+
+    def trigger_manual_weather_log(self):
+        """Trigger weather log manually (for testing/debugging)"""
+        logger.info("🔧 Manual weather log triggered")
+        try:
+            self.log_weather()
+            return {'success': True, 'message': 'Weather log saved successfully'}
+        except Exception as e:
+            logger.error(f"❌ Manual weather log failed: {e}")
+            return {'success': False, 'message': str(e)}
 
 # Global scheduler instance
 _scheduler = None
