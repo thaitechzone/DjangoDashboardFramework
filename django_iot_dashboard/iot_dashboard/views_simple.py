@@ -1641,3 +1641,334 @@ def api_ds18b20_latest(request):
     except Exception as e:
         logger.error(f"❌ DS18B20 API Error: {e}")
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+# =============================================================================
+# Weather Log API Endpoints  (สำหรับ N8N Pull)
+# =============================================================================
+
+def _weather_log_to_dict(w):
+    """แปลง WeatherLog instance เป็น dict สำหรับ JSON response"""
+    return {
+        'id':               w.id,
+        'timestamp':        format_datetime_local(w.timestamp),
+        'city_name':        w.city_name,
+        'temperature':      w.temperature,
+        'feels_like':       w.feels_like,
+        'humidity':         w.humidity,
+        'pressure':         w.pressure,
+        'wind_speed':       w.wind_speed,
+        'wind_deg':         w.wind_deg,
+        'clouds':           w.clouds,
+        'weather_main':     w.weather_main,
+        'weather_desc':     w.weather_desc,
+        'rain_probability': w.rain_probability,
+        'aqi':              w.aqi,
+        'aqi_label':        w.aqi_label,
+        'pm2_5':            w.pm2_5,
+        'pm10':             w.pm10,
+    }
+
+
+@csrf_exempt
+def api_weather_latest(request):
+    """
+    GET /api/v1/weather/latest/
+    ดึงข้อมูลสภาพอากาศล่าสุด (WeatherLog record ล่าสุด)
+
+    Response:
+    {
+        "success": true,
+        "data": {
+            "id": 42,
+            "timestamp": "2026-03-07 09:15:00",
+            "city_name": "Nakhon Si Thammarat",
+            "temperature": 31.5,
+            "feels_like": 36.2,
+            "humidity": 78,
+            "pressure": 1009,
+            "wind_speed": 3.1,
+            "wind_deg": 180,
+            "clouds": 40,
+            "weather_main": "Clouds",
+            "weather_desc": "scattered clouds",
+            "rain_probability": 25.0,
+            "aqi": 2,
+            "aqi_label": "Fair",
+            "pm2_5": 12.3,
+            "pm10": 18.7
+        },
+        "fetched_at": "2026-03-07 09:18:00"
+    }
+    """
+    if request.method != 'GET':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    try:
+        from .models import WeatherLog
+        latest = WeatherLog.objects.order_by('-timestamp').first()
+        if not latest:
+            return JsonResponse({
+                'success': True,
+                'data': None,
+                'message': 'No weather data recorded yet. Scheduler runs every 15 minutes.',
+                'fetched_at': format_datetime_local(timezone.now()),
+            })
+        return JsonResponse({
+            'success': True,
+            'data': _weather_log_to_dict(latest),
+            'fetched_at': format_datetime_local(timezone.now()),
+        })
+    except Exception as e:
+        logger.error(f"❌ Weather Latest API Error: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@csrf_exempt
+def api_weather_history(request):
+    """
+    GET /api/v1/weather/history/?limit=96&offset=0
+    ดึงประวัติสภาพอากาศ (เรียงจากใหม่ไปเก่า)
+
+    Query Parameters:
+    - limit   : จำนวนรายการ (default=96 = 1 วัน)
+    - offset  : เริ่มจากรายการที่ (default=0)
+    - hours   : ถ้าระบุ hours=N จะดึงเฉพาะ N ชั่วโมงล่าสุด (override limit/offset)
+
+    Response:
+    {
+        "success": true,
+        "data": [...],
+        "pagination": { "total": 500, "limit": 96, "offset": 0, "count": 96 },
+        "fetched_at": "..."
+    }
+    """
+    if request.method != 'GET':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    try:
+        from .models import WeatherLog
+        from datetime import timedelta
+
+        hours = request.GET.get('hours')
+        if hours:
+            cutoff = timezone.now() - timedelta(hours=int(hours))
+            qs = WeatherLog.objects.filter(timestamp__gte=cutoff).order_by('-timestamp')
+            data = [_weather_log_to_dict(w) for w in qs]
+            return JsonResponse({
+                'success': True,
+                'data': data,
+                'count': len(data),
+                'hours_requested': int(hours),
+                'fetched_at': format_datetime_local(timezone.now()),
+            })
+
+        limit  = min(int(request.GET.get('limit', 96)), 1000)
+        offset = int(request.GET.get('offset', 0))
+        total  = WeatherLog.objects.count()
+        qs     = WeatherLog.objects.order_by('-timestamp')[offset:offset + limit]
+        data   = [_weather_log_to_dict(w) for w in qs]
+        return JsonResponse({
+            'success': True,
+            'data': data,
+            'pagination': {
+                'total':  total,
+                'limit':  limit,
+                'offset': offset,
+                'count':  len(data),
+            },
+            'fetched_at': format_datetime_local(timezone.now()),
+        })
+    except Exception as e:
+        logger.error(f"❌ Weather History API Error: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@csrf_exempt
+def api_weather_stats(request):
+    """
+    GET /api/v1/weather/stats/?hours=24
+    สถิติสภาพอากาศย้อนหลัง N ชั่วโมง (default 24h)
+
+    Response:
+    {
+        "success": true,
+        "data": {
+            "period_hours": 24,
+            "total_records": 96,
+            "temperature": { "avg": 31.2, "min": 28.5, "max": 35.1 },
+            "humidity":    { "avg": 75.0, "min": 62,   "max": 89   },
+            "rain_probability_avg": 30.5,
+            "aqi_avg": 2.1,
+            "pm2_5_avg": 14.2,
+            "dominant_weather": "Clouds",
+            "latest": { ... }
+        }
+    }
+    """
+    if request.method != 'GET':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    try:
+        from .models import WeatherLog
+        from django.db.models import Avg, Min, Max, Count
+        from datetime import timedelta
+
+        hours  = int(request.GET.get('hours', 24))
+        cutoff = timezone.now() - timedelta(hours=hours)
+        qs     = WeatherLog.objects.filter(timestamp__gte=cutoff)
+
+        if not qs.exists():
+            return JsonResponse({
+                'success': True,
+                'data': None,
+                'message': f'No weather data in the last {hours} hours.',
+                'fetched_at': format_datetime_local(timezone.now()),
+            })
+
+        agg = qs.aggregate(
+            avg_temp    = Avg('temperature'),
+            min_temp    = Min('temperature'),
+            max_temp    = Max('temperature'),
+            avg_hum     = Avg('humidity'),
+            min_hum     = Min('humidity'),
+            max_hum     = Max('humidity'),
+            avg_rain    = Avg('rain_probability'),
+            avg_aqi     = Avg('aqi'),
+            avg_pm25    = Avg('pm2_5'),
+            avg_pm10    = Avg('pm10'),
+            total       = Count('id'),
+        )
+
+        # most frequent weather_main
+        dominant_row = (
+            qs.values('weather_main')
+            .annotate(cnt=Count('id'))
+            .order_by('-cnt')
+            .first()
+        )
+        dominant = dominant_row['weather_main'] if dominant_row else None
+
+        latest = qs.order_by('-timestamp').first()
+
+        def _r(v, n=1):
+            return round(float(v), n) if v is not None else None
+
+        return JsonResponse({
+            'success': True,
+            'data': {
+                'period_hours':         hours,
+                'total_records':        agg['total'],
+                'temperature':          {'avg': _r(agg['avg_temp']), 'min': _r(agg['min_temp']), 'max': _r(agg['max_temp'])},
+                'humidity':             {'avg': _r(agg['avg_hum']),  'min': _r(agg['min_hum']),  'max': _r(agg['max_hum'])},
+                'rain_probability_avg': _r(agg['avg_rain']),
+                'aqi_avg':              _r(agg['avg_aqi']),
+                'pm2_5_avg':            _r(agg['avg_pm25']),
+                'pm10_avg':             _r(agg['avg_pm10']),
+                'dominant_weather':     dominant,
+                'latest':               _weather_log_to_dict(latest),
+            },
+            'fetched_at': format_datetime_local(timezone.now()),
+        })
+    except Exception as e:
+        logger.error(f"❌ Weather Stats API Error: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@csrf_exempt
+def api_n8n_snapshot(request):
+    """
+    GET /api/v1/n8n/snapshot/
+    Payload รวมทุกอย่างในครั้งเดียว — N8N เรียก endpoint นี้ endpoint เดียว
+    แล้วแยก branch ด้วย IF node ใน workflow
+
+    Response รวม:
+    - weather_latest      : ข้อมูลอากาศล่าสุด (15 นาที)
+    - sensor_latest       : ข้อมูล sensor ล่าสุด
+    - relay_status        : สถานะ relay ปัจจุบัน
+    - ai_latest_decision  : AI ตัดสินใจล่าสุด
+    - alarm               : สถานะ alarm ปัจจุบัน
+    - weather_stats_24h   : สถิติอากาศ 24 ชั่วโมง
+    - server_time         : เวลาเซิร์ฟเวอร์
+    """
+    if request.method != 'GET':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    try:
+        from .models import WeatherLog, AIDecisionLog, Relay, SensorData
+        from django.db.models import Avg, Min, Max, Count
+        from datetime import timedelta
+
+        now = timezone.now()
+
+        # ── Weather latest ─────────────────────────────────────────
+        weather_latest = WeatherLog.objects.order_by('-timestamp').first()
+
+        # ── Weather stats 24h ──────────────────────────────────────
+        cutoff_24h = now - timedelta(hours=24)
+        qs_24h = WeatherLog.objects.filter(timestamp__gte=cutoff_24h)
+        weather_stats = None
+        if qs_24h.exists():
+            agg = qs_24h.aggregate(
+                avg_temp=Avg('temperature'), min_temp=Min('temperature'), max_temp=Max('temperature'),
+                avg_hum=Avg('humidity'),     min_hum=Min('humidity'),     max_hum=Max('humidity'),
+                avg_rain=Avg('rain_probability'),
+                avg_aqi=Avg('aqi'), avg_pm25=Avg('pm2_5'),
+            )
+            def _r(v, n=1): return round(float(v), n) if v is not None else None
+            weather_stats = {
+                'period_hours': 24,
+                'records': qs_24h.count(),
+                'temperature': {'avg': _r(agg['avg_temp']), 'min': _r(agg['min_temp']), 'max': _r(agg['max_temp'])},
+                'humidity':    {'avg': _r(agg['avg_hum']),  'min': _r(agg['min_hum']),  'max': _r(agg['max_hum'])},
+                'rain_probability_avg': _r(agg['avg_rain']),
+                'aqi_avg':  _r(agg['avg_aqi']),
+                'pm2_5_avg': _r(agg['avg_pm25']),
+            }
+
+        # ── Sensor latest ──────────────────────────────────────────
+        sensor = SensorData.objects.order_by('-timestamp').first()
+
+        # ── Relay status ───────────────────────────────────────────
+        relay = Relay.objects.first()
+
+        # ── AI latest decision ─────────────────────────────────────
+        ai_log = AIDecisionLog.objects.order_by('-timestamp').first()
+
+        # ── Alarm status ───────────────────────────────────────────
+        threshold = ThresholdSetting.get_or_create_default()
+
+        return JsonResponse({
+            'success': True,
+            'server_time': format_datetime_local(now),
+            'weather_latest': _weather_log_to_dict(weather_latest) if weather_latest else None,
+            'weather_stats_24h': weather_stats,
+            'sensor_latest': {
+                'id':          sensor.id,
+                'device_name': sensor.device_name,
+                'temperature': sensor.temperature,
+                'humidity':    sensor.humidity,
+                'ds18b20':     sensor.ds18b20_temperature,
+                'timestamp':   format_datetime_local(sensor.timestamp),
+            } if sensor else None,
+            'relay_status': {
+                'relay1': relay.relay1_status if relay else None,
+                'relay2': relay.relay2_status if relay else None,
+                'relay3': relay.relay3_status if relay else None,
+                'last_updated': format_datetime_local(relay.last_updated) if relay else None,
+            },
+            'ai_latest_decision': {
+                'id':         ai_log.id,
+                'decision':   ai_log.decision,
+                'confidence': float(ai_log.confidence),
+                'reasoning':  ai_log.reasoning,
+                'relay_status': ai_log.relay_status,
+                'command_sent': ai_log.command_sent,
+                'timestamp':  format_datetime_local(ai_log.timestamp),
+            } if ai_log else None,
+            'alarm': {
+                'active':         threshold.alarm_active,
+                'reason':         threshold.alarm_reason,
+                'last_triggered': format_datetime_local(threshold.last_triggered) if threshold.last_triggered else None,
+                'mode':           threshold.mode,
+            },
+        })
+    except Exception as e:
+        logger.error(f"❌ N8N Snapshot API Error: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)

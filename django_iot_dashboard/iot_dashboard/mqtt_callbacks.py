@@ -71,6 +71,16 @@ def handle_relay_state_message(topic, message):
                 reason=f'ESP32 state change: {"OFF" if old_state else "ON"} → {message_upper}',
             )
             logger.info(f"✅ RELAY {relay_num} changed by ESP32: {old_state} → {new_state}")
+
+            # ── N8N Snapshot Push: relay change ───────────────────────────
+            from . import n8n_pusher
+            n8n_pusher.push_snapshot('relay', {
+                'relay_number': relay_num,
+                'new_state':    'ON' if new_state else 'OFF',
+                'old_state':    'ON' if old_state else 'OFF',
+                'source':       'mqtt',
+                'reason':       f'ESP32 state change: {"OFF" if old_state else "ON"} → {message_upper}',
+            })
         else:
             logger.debug(f"🔄 RELAY {relay_num} state confirmed (no change): {new_state}")
         
@@ -123,7 +133,16 @@ def handle_sensor_data_message(topic, message):
             )
         
         logger.info(f"📊 Sensor data saved: Temp={sensor_data.temperature}°C, Hum={sensor_data.humidity}%")
-        
+
+        # ── N8N Snapshot Push: sensor data ────────────────────────────────
+        from . import n8n_pusher
+        n8n_pusher.push_snapshot('sensor', {
+            'device_name': sensor_data.device_name,
+            'temperature': sensor_data.temperature,
+            'humidity':    sensor_data.humidity,
+            'ds18b20':     sensor_data.ds18b20_temperature,
+        })
+
         # ========================================
         # AUTO THRESHOLD CONTROL
         # ========================================
@@ -153,6 +172,13 @@ def handle_sensor_data_message(topic, message):
                     RelayLog.record(relay_number=1, new_state=True, previous_state=False,
                                     source='threshold', reason=check_result['reason'])
 
+                    # ── N8N Snapshot Push: alarm activated ───────────────
+                    n8n_pusher.push_snapshot('alarm', {
+                        'alarm_active': True,
+                        'alarm_state':  'ACTIVATED',
+                        'reason':       check_result['reason'],
+                    })
+
                     logger.info(f"✅ Auto-Control: Relay 1 turned ON (Alarm Activated)")
                 
                 # ถ้ากลับมาปกติและ Alarm เปิดอยู่
@@ -169,6 +195,13 @@ def handle_sensor_data_message(topic, message):
                     from .models import RelayLog
                     RelayLog.record(relay_number=1, new_state=False, previous_state=True,
                                     source='threshold', reason=check_result['reason'])
+
+                    # ── N8N Snapshot Push: alarm deactivated ─────────────
+                    n8n_pusher.push_snapshot('alarm', {
+                        'alarm_active': False,
+                        'alarm_state':  'DEACTIVATED',
+                        'reason':       check_result['reason'],
+                    })
 
                     logger.info(f"✅ Auto-Control: Relay 1 turned OFF (Alarm Deactivated)")
                 
@@ -255,6 +288,23 @@ def handle_ds18b20_message(topic, message):
             )
 
         logger.info(f"🌡️ DS18B20 temperature received: {temp_value}°C → saved to DeviceConfig & SensorData")
+
+        # ── N8N Push: DS18B20 sensor data ────────────────────────────────
+        if existing:
+            push_obj = existing
+        else:
+            push_obj = SensorData.objects.filter(
+                device_name=device_name,
+                timestamp__gte=now,
+            ).order_by('-timestamp').first()
+        if push_obj:
+            from . import n8n_pusher
+            n8n_pusher.push_snapshot('sensor', {
+                'device_name': push_obj.device_name,
+                'temperature': push_obj.temperature,
+                'humidity':    push_obj.humidity,
+                'ds18b20':     push_obj.ds18b20_temperature,
+            })
 
     except (ValueError, TypeError) as e:
         logger.warning(f"⚠️ Invalid DS18B20 payload '{message}': {e}")

@@ -60,4 +60,12 @@ urlpatterns = [
 
     # DS18B20 Sensor API
     path('api/v1/sensors/ds18b20/', views_simple.api_ds18b20_latest, name='api_v1_ds18b20_latest'),
+
+    # ── Weather Log APIs (N8N Pull) ────────────────────────────────────────
+    path('api/v1/weather/latest/',  views_simple.api_weather_latest,  name='api_v1_weather_latest'),
+    path('api/v1/weather/history/', views_simple.api_weather_history, name='api_v1_weather_history'),
+    path('api/v1/weather/stats/',   views_simple.api_weather_stats,   name='api_v1_weather_stats'),
+
+    # ── N8N All-in-one Snapshot ────────────────────────────────────────────
+    path('api/v1/n8n/snapshot/',    views_simple.api_n8n_snapshot,    name='api_v1_n8n_snapshot'),
 ]

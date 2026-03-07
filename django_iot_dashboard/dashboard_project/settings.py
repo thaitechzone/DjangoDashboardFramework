@@ -128,3 +128,16 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# N8N Push Webhooks  (Approach A — Real-time Push)
+# Set N8N_PUSH_ENABLED=true in .env and fill in the webhook URLs
+# ─────────────────────────────────────────────────────────────────────────────
+N8N_PUSH_ENABLED  = os.getenv('N8N_PUSH_ENABLED',  'false')
+N8N_PUSH_TIMEOUT  = os.getenv('N8N_PUSH_TIMEOUT',  '5')
+
+N8N_WEBHOOK_SENSOR  = os.getenv('N8N_WEBHOOK_SENSOR',  '')
+N8N_WEBHOOK_RELAY   = os.getenv('N8N_WEBHOOK_RELAY',   '')
+N8N_WEBHOOK_ALARM   = os.getenv('N8N_WEBHOOK_ALARM',   '')
+N8N_WEBHOOK_AI      = os.getenv('N8N_WEBHOOK_AI',      '')
+N8N_WEBHOOK_WEATHER = os.getenv('N8N_WEBHOOK_WEATHER', '')

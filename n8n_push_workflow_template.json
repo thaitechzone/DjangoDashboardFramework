@@ -1,0 +1,406 @@
+{
+  "name": "IoT Dashboard — N8N Push Workflow (Real-time)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "iot-sensor",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-sensor",
+      "name": "Webhook: Sensor Data",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 160],
+      "webhookId": "iot-sensor",
+      "notes": "URL: http://YOUR_N8N:5678/webhook/iot-sensor\nSet N8N_WEBHOOK_SENSOR in Django .env"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "iot-relay",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-relay",
+      "name": "Webhook: Relay Change",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 320],
+      "webhookId": "iot-relay",
+      "notes": "URL: http://YOUR_N8N:5678/webhook/iot-relay\nSet N8N_WEBHOOK_RELAY in Django .env"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "iot-alarm",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-alarm",
+      "name": "Webhook: Alarm",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 480],
+      "webhookId": "iot-alarm",
+      "notes": "URL: http://YOUR_N8N:5678/webhook/iot-alarm\nSet N8N_WEBHOOK_ALARM in Django .env"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "iot-ai",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-ai",
+      "name": "Webhook: AI Decision",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 640],
+      "webhookId": "iot-ai",
+      "notes": "URL: http://YOUR_N8N:5678/webhook/iot-ai\nSet N8N_WEBHOOK_AI in Django .env"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "iot-weather",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-weather",
+      "name": "Webhook: Weather Log",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 800],
+      "webhookId": "iot-weather",
+      "notes": "URL: http://YOUR_N8N:5678/webhook/iot-weather\nSet N8N_WEBHOOK_WEATHER in Django .env"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"received\":true}",
+        "options": {}
+      },
+      "id": "respond-sensor",
+      "name": "Respond 200 (sensor)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [460, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────\n// Sensor data: build notification if anomaly\n// ─────────────────────────────────────────────\nconst d = $input.first().json.body;\nconst alerts = [];\n\nif ((d.temperature || 0) >= 35)\n  alerts.push(`🌡 Indoor Temp: ${d.temperature}°C (HIGH)`);\nif ((d.humidity || 0) >= 90)\n  alerts.push(`💧 Indoor Humidity: ${d.humidity}% (HIGH)`);\nif ((d.ds18b20 || 0) >= 40)\n  alerts.push(`🌡 DS18B20: ${d.ds18b20}°C (HIGH)`);\n\nreturn [{\n  json: {\n    has_alert: alerts.length > 0,\n    alerts,\n    message: alerts.length\n      ? `📡 Sensor Alert (${d.device_name})\\n` + alerts.join('\\n') + `\\n\\nTimestamp: ${d.timestamp}`\n      : '',\n    raw: d,\n  }\n}];"
+      },
+      "id": "analyze-sensor",
+      "name": "Analyze Sensor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 220]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+          "conditions": [{"id": "sensor-alert", "leftValue": "={{ $json.has_alert }}", "rightValue": true, "operator": {"type": "boolean","operation": "true"}}],
+          "combinator": "or"
+        }
+      },
+      "id": "if-sensor-alert",
+      "name": "Sensor Anomaly?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"received\":true}",
+        "options": {}
+      },
+      "id": "respond-relay",
+      "name": "Respond 200 (relay)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [460, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────\n// Relay change: build notification message\n// ─────────────────────────────────────────────\nconst d = $input.first().json.body;\nconst icon = d.new_state === 'ON' ? '🟢' : '🔴';\nconst sourceMap = {\n  mqtt: 'ESP32',\n  ai_agent: 'AI Agent',\n  threshold: 'Threshold Auto',\n  dashboard: 'Dashboard',\n};\nconst src = sourceMap[d.source] || d.source;\nreturn [{\n  json: {\n    message: `${icon} Relay ${d.relay_number}: ${d.new_state}\\nSource: ${src}\\nReason: ${d.reason || 'N/A'}\\nTime: ${d.timestamp}`,\n    raw: d,\n  }\n}];"
+      },
+      "id": "format-relay",
+      "name": "Format Relay Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 380]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"received\":true}",
+        "options": {}
+      },
+      "id": "respond-alarm",
+      "name": "Respond 200 (alarm)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [460, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────\n// Alarm event: build critical notification\n// ─────────────────────────────────────────────\nconst d = $input.first().json.body;\nconst icon = d.alarm_active ? '🚨' : '✅';\nreturn [{\n  json: {\n    message: `${icon} Alarm ${d.alarm_state}\\nReason: ${d.reason || 'N/A'}\\nTime: ${d.timestamp}`,\n    raw: d,\n    is_critical: d.alarm_active === true,\n  }\n}];"
+      },
+      "id": "format-alarm",
+      "name": "Format Alarm Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 540]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"received\":true}",
+        "options": {}
+      },
+      "id": "respond-ai",
+      "name": "Respond 200 (ai)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [460, 640]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────\n// AI Decision: log and notify summary\n// ─────────────────────────────────────────────\nconst d = $input.first().json.body;\nconst icon = d.decision === 'on' ? '✅ ON' : '🛑 OFF';\nreturn [{\n  json: {\n    message: `🤖 AI Decision: ${icon}\\nConfidence: ${d.confidence_pct}%\\nRelay ${d.relay_number}: ${d.command} (${d.command_success ? 'sent' : 'failed'})\\nReasoning: ${d.reasoning_summary}\\nTime: ${d.timestamp}`,\n    raw: d,\n  }\n}];"
+      },
+      "id": "format-ai",
+      "name": "Format AI Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"received\":true}",
+        "options": {}
+      },
+      "id": "respond-weather",
+      "name": "Respond 200 (weather)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [460, 800]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────\n// Weather log: check rain / AQI alerts\n// ─────────────────────────────────────────────\nconst d = $input.first().json.body;\nconst alerts = [];\n\nif ((d.rain_probability || 0) >= 70)\n  alerts.push(`🌧 Rain: ${d.rain_probability}%`);\nif ((d.temperature || 0) >= 38)\n  alerts.push(`🌡 Outdoor Temp: ${d.temperature}°C`);\nif ((d.aqi || 0) >= 4)\n  alerts.push(`🏭 AQI ${d.aqi} (${d.aqi_label}) — PM2.5: ${d.pm2_5} μg/m³`);\n\nconst summary = [\n  `🌤 Weather Update — ${d.city_name}`,\n  `Temp: ${d.temperature}°C (feels ${d.feels_like}°C) | Hum: ${d.humidity}%`,\n  `Wind: ${d.wind_speed} m/s | Clouds: ${d.clouds}% | Rain: ${d.rain_probability}%`,\n  `Condition: ${d.weather_desc} | AQI: ${d.aqi} (${d.aqi_label})`,\n  `PM2.5: ${d.pm2_5} | PM10: ${d.pm10} μg/m³`,\n  `Time: ${d.timestamp}`,\n].join('\\n');\n\nreturn [{\n  json: {\n    has_alert: alerts.length > 0,\n    alerts,\n    summary,\n    alert_message: alerts.length ? `⚠️ Weather Alerts:\\n` + alerts.join('\\n') + '\\n\\n' + summary : '',\n    raw: d,\n  }\n}];"
+      },
+      "id": "analyze-weather",
+      "name": "Analyze Weather",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 860]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+          "conditions": [{"id": "weather-alert", "leftValue": "={{ $json.has_alert }}", "rightValue": true, "operator": {"type": "boolean","operation": "true"}}],
+          "combinator": "or"
+        }
+      },
+      "id": "if-weather-alert",
+      "name": "Weather Alert?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 860]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://notify-api.line.me/api/notify",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Content-Type", "value": "application/x-www-form-urlencoded"}]},
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {"parameters": [{"name": "message", "value": "={{ $json.message }}"}]},
+        "options": {}
+      },
+      "id": "line-sensor",
+      "name": "LINE Notify (Sensor Alert)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 220],
+      "notes": "HTTP Header Auth: Authorization = Bearer <LINE_TOKEN>"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://notify-api.line.me/api/notify",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Content-Type", "value": "application/x-www-form-urlencoded"}]},
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {"parameters": [{"name": "message", "value": "={{ $json.message }}"}]},
+        "options": {}
+      },
+      "id": "line-relay",
+      "name": "LINE Notify (Relay Change)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://notify-api.line.me/api/notify",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Content-Type", "value": "application/x-www-form-urlencoded"}]},
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {"parameters": [{"name": "message", "value": "={{ $json.message }}"}]},
+        "options": {}
+      },
+      "id": "line-alarm",
+      "name": "LINE Notify (Alarm)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 540]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://notify-api.line.me/api/notify",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Content-Type", "value": "application/x-www-form-urlencoded"}]},
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {"parameters": [{"name": "message", "value": "={{ $json.message }}"}]},
+        "options": {}
+      },
+      "id": "line-ai",
+      "name": "LINE Notify (AI Decision)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 700]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://notify-api.line.me/api/notify",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Content-Type", "value": "application/x-www-form-urlencoded"}]},
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {"parameters": [{"name": "message", "value": "={{ $json.alert_message }}"}]},
+        "options": {}
+      },
+      "id": "line-weather",
+      "name": "LINE Notify (Weather Alert)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 860]
+    }
+  ],
+  "connections": {
+    "Webhook: Sensor Data": {
+      "main": [[
+        {"node": "Respond 200 (sensor)", "type": "main", "index": 0},
+        {"node": "Analyze Sensor",       "type": "main", "index": 0}
+      ]]
+    },
+    "Analyze Sensor": {
+      "main": [[{"node": "Sensor Anomaly?", "type": "main", "index": 0}]]
+    },
+    "Sensor Anomaly?": {
+      "main": [
+        [{"node": "LINE Notify (Sensor Alert)", "type": "main", "index": 0}],
+        []
+      ]
+    },
+    "Webhook: Relay Change": {
+      "main": [[
+        {"node": "Respond 200 (relay)",   "type": "main", "index": 0},
+        {"node": "Format Relay Message",  "type": "main", "index": 0}
+      ]]
+    },
+    "Format Relay Message": {
+      "main": [[{"node": "LINE Notify (Relay Change)", "type": "main", "index": 0}]]
+    },
+    "Webhook: Alarm": {
+      "main": [[
+        {"node": "Respond 200 (alarm)",   "type": "main", "index": 0},
+        {"node": "Format Alarm Message",  "type": "main", "index": 0}
+      ]]
+    },
+    "Format Alarm Message": {
+      "main": [[{"node": "LINE Notify (Alarm)", "type": "main", "index": 0}]]
+    },
+    "Webhook: AI Decision": {
+      "main": [[
+        {"node": "Respond 200 (ai)",  "type": "main", "index": 0},
+        {"node": "Format AI Message", "type": "main", "index": 0}
+      ]]
+    },
+    "Format AI Message": {
+      "main": [[{"node": "LINE Notify (AI Decision)", "type": "main", "index": 0}]]
+    },
+    "Webhook: Weather Log": {
+      "main": [[
+        {"node": "Respond 200 (weather)", "type": "main", "index": 0},
+        {"node": "Analyze Weather",       "type": "main", "index": 0}
+      ]]
+    },
+    "Analyze Weather": {
+      "main": [[{"node": "Weather Alert?", "type": "main", "index": 0}]]
+    },
+    "Weather Alert?": {
+      "main": [
+        [{"node": "LINE Notify (Weather Alert)", "type": "main", "index": 0}],
+        []
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {"executionOrder": "v1"},
+  "staticData": null,
+  "tags": [{"name": "IoT"}, {"name": "Push"}, {"name": "Real-time"}],
+  "__meta": {
+    "_comment": "=== HOW TO USE (Push / Real-time Approach A) ===",
+    "_step1": "Import this file in N8N: Settings → Import Workflow",
+    "_step2": "Edit .env on Django server:",
+    "_step2a": "  N8N_PUSH_ENABLED=true",
+    "_step2b": "  N8N_WEBHOOK_SENSOR=http://YOUR_N8N:5678/webhook/iot-sensor",
+    "_step2c": "  N8N_WEBHOOK_RELAY=http://YOUR_N8N:5678/webhook/iot-relay",
+    "_step2d": "  N8N_WEBHOOK_ALARM=http://YOUR_N8N:5678/webhook/iot-alarm",
+    "_step2e": "  N8N_WEBHOOK_AI=http://YOUR_N8N:5678/webhook/iot-ai",
+    "_step2f": "  N8N_WEBHOOK_WEATHER=http://YOUR_N8N:5678/webhook/iot-weather",
+    "_step3": "Create LINE Notify credential in N8N (HTTP Header Auth): Authorization = Bearer <token>",
+    "_step4": "Activate all 5 webhook nodes in N8N",
+    "_step5": "Restart Django server: run_backend.bat",
+    "_event_map": {
+      "sensor":  "Triggered every time ESP32 sends DHT22 + DS18B20 data via MQTT",
+      "relay":   "Triggered every time a relay changes state (ESP32 / AI / Dashboard / Threshold)",
+      "alarm":   "Triggered when alarm is activated or deactivated by threshold check",
+      "ai":      "Triggered after each AI agent analysis cycle (default: every 60 min)",
+      "weather": "Triggered every 15 minutes when weather logger saves a WeatherLog record"
+    },
+    "_payload_fields": {
+      "all_events": ["event", "timestamp", "source"],
+      "sensor":  ["device_name", "temperature", "humidity", "ds18b20", "sensor_id"],
+      "relay":   ["relay_number", "new_state", "old_state", "changed", "source", "reason"],
+      "alarm":   ["alarm_active", "alarm_state", "reason"],
+      "ai":      ["decision", "confidence_pct", "reasoning_summary", "relay_number", "command", "command_success"],
+      "weather": ["city_name", "temperature", "feels_like", "humidity", "pressure", "wind_speed", "clouds", "weather_main", "weather_desc", "rain_probability", "aqi", "aqi_label", "pm2_5", "pm10"]
+    }
+  }
+}

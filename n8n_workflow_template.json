@@ -1,0 +1,228 @@
+{
+  "name": "IoT Dashboard — N8N Pull Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 15 }]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://YOUR_SERVER_IP:8000/api/v1/n8n/snapshot/",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "fetch-snapshot",
+      "name": "GET /api/v1/n8n/snapshot/",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "notes": "Change YOUR_SERVER_IP to your Django server address"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────\n// Parse snapshot and build alert rules\n// ─────────────────────────────────────────────\nconst snap = $input.first().json;\n\nconst weather  = snap.weather_latest  || {};\nconst sensor   = snap.sensor_latest   || {};\nconst relay    = snap.relay_status    || {};\nconst ai       = snap.ai_latest_decision || {};\nconst alarm    = snap.alarm           || {};\nconst stats24  = snap.weather_stats_24h || {};\n\n// ── Alert conditions ─────────────────────────\nconst alerts = [];\n\nif (alarm.active) {\n  alerts.push({ level: 'CRITICAL', msg: `🚨 Alarm Active: ${alarm.reason}` });\n}\n\nif ((weather.rain_probability || 0) >= 70) {\n  alerts.push({ level: 'WARNING', msg: `🌧 Rain Probability: ${weather.rain_probability}% — Consider closing the greenhouse` });\n}\n\nif ((weather.temperature || 0) >= 38) {\n  alerts.push({ level: 'WARNING', msg: `🌡 Outdoor temp high: ${weather.temperature}°C` });\n}\n\nif ((weather.aqi || 0) >= 4) {\n  alerts.push({ level: 'WARNING', msg: `🏭 AQI ${weather.aqi} (${weather.aqi_label}) — PM2.5: ${weather.pm2_5} μg/m³` });\n}\n\nif ((sensor.temperature || 0) >= 35) {\n  alerts.push({ level: 'WARNING', msg: `🌡 Indoor sensor temp high: ${sensor.temperature}°C` });\n}\n\nif ((sensor.humidity || 0) >= 90) {\n  alerts.push({ level: 'INFO', msg: `💧 Indoor humidity high: ${sensor.humidity}%` });\n}\n\n// ── Daily report flag ─────────────────────────\nconst now = new Date();\nconst isDailyReportTime = (now.getHours() === 7 && now.getMinutes() < 15);\n\n// ── Summary message ───────────────────────────\nconst summaryLines = [\n  `📡 IoT Dashboard — ${snap.server_time}`,\n  ``,\n  `🌤 Weather (${weather.city_name || 'Nakhon Si Thammarat'})`,\n  `  Temp: ${weather.temperature}°C | Feels: ${weather.feels_like}°C | Humidity: ${weather.humidity}%`,\n  `  Wind: ${weather.wind_speed} m/s | Clouds: ${weather.clouds}% | Rain Prob: ${weather.rain_probability}%`,\n  `  Condition: ${weather.weather_desc} | AQI: ${weather.aqi} (${weather.aqi_label})`,\n  `  PM2.5: ${weather.pm2_5} μg/m³ | PM10: ${weather.pm10} μg/m³`,\n  ``,\n  `🌡 Sensor (${sensor.device_name})`,\n  `  Indoor: ${sensor.temperature}°C | Humidity: ${sensor.humidity}% | DS18B20: ${sensor.ds18b20}°C`,\n  ``,\n  `🔌 Relay: R1=${relay.relay1} R2=${relay.relay2} R3=${relay.relay3}`,\n  `🤖 AI: ${ai.decision || 'N/A'} (${(ai.confidence||0)*100|0}% confidence)`,\n];\n\nif (alerts.length) {\n  summaryLines.push(`\\n⚠️ ALERTS:\\n` + alerts.map(a => `  [${a.level}] ${a.msg}`).join('\\n'));\n}\n\nreturn [{\n  json: {\n    has_alerts:        alerts.length > 0,\n    alerts,\n    is_daily_report:   isDailyReportTime,\n    summary_message:   summaryLines.join('\\n'),\n    // pass-through for downstream nodes\n    weather,\n    sensor,\n    relay,\n    ai,\n    alarm,\n    stats24,\n    server_time: snap.server_time,\n  }\n}];"
+      },
+      "id": "analyze-data",
+      "name": "Analyze + Build Alerts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "has-alerts",
+              "leftValue": "={{ $json.has_alerts }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "or"
+        }
+      },
+      "id": "if-has-alerts",
+      "name": "Has Alerts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://notify-api.line.me/api/notify",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/x-www-form-urlencoded" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "message", "value": "={{ $json.summary_message }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "line-notify",
+      "name": "LINE Notify (Alert)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 200],
+      "notes": "Set HTTP Header Auth credential: name=Authorization, value=Bearer YOUR_LINE_TOKEN"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-daily",
+              "leftValue": "={{ $json.is_daily_report }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "or"
+        }
+      },
+      "id": "if-daily-report",
+      "name": "Is Daily Report Time? (07:00)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 420]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Weather Daily", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "date":           "={{ $json.server_time }}",
+            "avg_temp":       "={{ $json.stats24.temperature?.avg }}",
+            "min_temp":       "={{ $json.stats24.temperature?.min }}",
+            "max_temp":       "={{ $json.stats24.temperature?.max }}",
+            "avg_humidity":   "={{ $json.stats24.humidity?.avg }}",
+            "avg_rain_prob":  "={{ $json.stats24.rain_probability_avg }}",
+            "avg_aqi":        "={{ $json.stats24.aqi_avg }}",
+            "avg_pm25":       "={{ $json.stats24.pm2_5_avg }}",
+            "records":        "={{ $json.stats24.records }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "google-sheets-daily",
+      "name": "Google Sheets — Daily Summary",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1340, 360],
+      "notes": "Create a Google Sheets credential and replace YOUR_GOOGLE_SHEET_ID"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://notify-api.line.me/api/notify",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/x-www-form-urlencoded" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "message", "value": "={{ $json.summary_message }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "line-notify-daily",
+      "name": "LINE Notify (Daily Report)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 240],
+      "notes": "Reuses same LINE Notify token — sends 07:00 daily weather summary"
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes": {
+      "main": [[{ "node": "GET /api/v1/n8n/snapshot/", "type": "main", "index": 0 }]]
+    },
+    "GET /api/v1/n8n/snapshot/": {
+      "main": [[{ "node": "Analyze + Build Alerts", "type": "main", "index": 0 }]]
+    },
+    "Analyze + Build Alerts": {
+      "main": [
+        [
+          { "node": "Has Alerts?",                        "type": "main", "index": 0 },
+          { "node": "Is Daily Report Time? (07:00)",      "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Has Alerts?": {
+      "main": [
+        [{ "node": "LINE Notify (Alert)",         "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Is Daily Report Time? (07:00)": {
+      "main": [
+        [
+          { "node": "LINE Notify (Daily Report)",  "type": "main", "index": 0 },
+          { "node": "Google Sheets — Daily Summary","type": "main", "index": 0 }
+        ],
+        []
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [{ "name": "IoT" }, { "name": "Weather" }, { "name": "Dashboard" }],
+  "triggerCount": 0,
+  "updatedAt": "2026-01-01T00:00:00.000Z",
+  "versionId": "1",
+  "__meta": {
+    "_comment": "=== HOW TO USE ===",
+    "_step1": "In N8N: Settings → Import Workflow → paste this JSON",
+    "_step2": "Edit 'GET /api/v1/n8n/snapshot/' node → set YOUR_SERVER_IP:PORT",
+    "_step3": "Create LINE Notify credential (HTTP Header Auth): Authorization = Bearer <token>",
+    "_step4": "If using Google Sheets: create credential and set YOUR_GOOGLE_SHEET_ID",
+    "_step5": "Activate the workflow",
+    "_apis_available": {
+      "snapshot (all-in-one)": "GET /api/v1/n8n/snapshot/",
+      "weather latest":        "GET /api/v1/weather/latest/",
+      "weather history":       "GET /api/v1/weather/history/?hours=24",
+      "weather stats":         "GET /api/v1/weather/stats/?hours=24",
+      "sensors latest":        "GET /api/v1/sensors/latest/",
+      "ai decisions":          "GET /api/v1/ai/decisions/",
+      "ai stats":              "GET /api/v1/ai/stats/",
+      "system status":         "GET /api/v1/system/status/",
+      "threshold check":       "GET /api/v1/threshold/check/",
+      "ds18b20":               "GET /api/v1/sensors/ds18b20/"
+    }
+  }
+}

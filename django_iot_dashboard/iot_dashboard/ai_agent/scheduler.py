@@ -107,6 +107,22 @@ class AIAgentScheduler:
                 f"{entry.city_name} {entry.temperature:.1f}°C {entry.humidity}% "
                 f"{entry.weather_desc} AQI={entry.aqi_label or '-'}"
             )
+
+            # ── N8N Snapshot Push: weather logged ────────────────────────
+            try:
+                from iot_dashboard import n8n_pusher
+                n8n_pusher.push_snapshot('weather', {
+                    'log_id':           entry.pk,
+                    'temperature':      entry.temperature,
+                    'humidity':         entry.humidity,
+                    'rain_probability': entry.rain_probability,
+                    'aqi':              entry.aqi,
+                    'aqi_label':        entry.aqi_label,
+                    'weather_desc':     entry.weather_desc,
+                })
+            except Exception as push_err:
+                logger.warning(f"⚠️ N8N snapshot push (weather) failed: {push_err}")
+
         except Exception as e:
             logger.error(f"❌ Weather logger error: {e}", exc_info=True)
 
@@ -171,6 +187,21 @@ class AIAgentScheduler:
             )
             
             logger.info("✅ Decision logged to database")
+
+            # ── N8N Snapshot Push: AI decision ───────────────────────────
+            try:
+                from iot_dashboard import n8n_pusher
+                n8n_pusher.push_snapshot('ai', {
+                    'decision':          decision,
+                    'confidence_pct':    round(confidence * 100, 1),
+                    'reasoning_summary': reasoning[:300],
+                    'relay_number':      relay_num,
+                    'command':           command,
+                    'command_success':   success,
+                })
+            except Exception as push_err:
+                logger.warning(f"⚠️ N8N snapshot push (ai) failed: {push_err}")
+
             logger.info("=" * 50)
             logger.info(f"🎯 Summary: {decision.upper()} | Confidence: {confidence*100:.1f}% | Success: {success}")
             logger.info("=" * 50)
