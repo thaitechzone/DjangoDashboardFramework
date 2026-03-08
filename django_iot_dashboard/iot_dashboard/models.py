@@ -148,7 +148,7 @@ class WeatherAPISettings(models.Model):
     )
     last_tested    = models.DateTimeField(null=True, blank=True, verbose_name='ทดสอบล่าสุด')
     last_test_ok   = models.BooleanField(null=True, blank=True, verbose_name='ผลทดสอบล่าสุด')
-    last_test_msg  = models.CharField(max_length=200, blank=True, verbose_name='ข้อความผลทดสอบ')
+    last_test_msg  = models.TextField(blank=True, verbose_name='ข้อความผลทดสอบ')
 
     class Meta:
         verbose_name = 'Weather API Settings'
