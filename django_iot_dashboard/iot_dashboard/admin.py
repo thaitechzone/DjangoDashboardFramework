@@ -869,7 +869,7 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
     class Media:
         css = {'all': ('iot_dashboard/admin_custom.css',)}
 
-    readonly_fields = ('test_connect_button', 'test_result_panel', 'model_presets_panel', 'save_inline_button')
+    readonly_fields = ('test_connect_button', 'sync_env_button', 'test_result_panel', 'model_presets_panel', 'save_inline_button')
 
     fieldsets = (
         ('🤖 AI Provider Settings', {
@@ -879,7 +879,7 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
             'fields': ('api_key', 'model_name', 'model_presets_panel', 'interval_minutes', 'is_enabled', 'save_inline_button'),
         }),
         ('🧪 ผลทดสอบล่าสุด', {
-            'fields': ('test_connect_button', 'test_result_panel'),
+            'fields': ('test_connect_button', 'sync_env_button', 'test_result_panel'),
         }),
     )
 
@@ -905,6 +905,9 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
             path('<int:pk>/run-test/',
                  self.admin_site.admin_view(self._run_test),
                  name='geminiaisettings_run_test'),
+            path('<int:pk>/sync-env-key/',
+                 self.admin_site.admin_view(self._sync_env_key),
+                 name='geminiaisettings_sync_env_key'),
         ]
         return custom + urls
 
@@ -915,15 +918,19 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
 
     # ── Custom test URL view ──────────────────────────────────────
     def _run_test(self, request, pk):
+        import os
         from django.shortcuts import redirect
         obj = GeminiAISettings.objects.get(pk=pk)
         redirect_url = f'/admin/iot_dashboard/geminiaisettings/{pk}/change/'
-        if not obj.api_key:
-            self.message_user(request, '⚠️ ยังไม่ได้ตั้งค่า API Key', level='WARNING')
+        # ใช้ key จาก DB ก่อน fallback ไป env var (เหมือน GeminiRelayAgent)
+        api_key = obj.api_key or os.getenv('OPENROUTER_API_KEY', '')
+        if not api_key:
+            self.message_user(request, '⚠️ ยังไม่ได้ตั้งค่า API Key (ทั้งใน DB และ OPENROUTER_API_KEY env)', level='WARNING')
             return redirect(redirect_url)
+        key_source = 'ENV (OPENROUTER_API_KEY)' if not obj.api_key else 'DB'
         try:
             from openai import OpenAI
-            client = OpenAI(base_url='https://openrouter.ai/api/v1', api_key=obj.api_key)
+            client = OpenAI(base_url='https://openrouter.ai/api/v1', api_key=api_key)
             response = client.chat.completions.create(
                 model=obj.model_name,
                 messages=[{'role': 'user', 'content': 'Reply with exactly: OK'}],
@@ -942,7 +949,9 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
                 f'<tr><td style="padding:3px 12px 3px 0;font-weight:bold;">⏱️ รอบวิเคราะห์</td>'
                 f'<td style="padding:3px 0;">ทุก {obj.interval_minutes} นาที</td></tr>'
                 f'<tr><td style="padding:3px 12px 3px 0;font-weight:bold;">🔑 API Key</td>'
-                f'<td style="padding:3px 0;font-family:monospace;">{obj.masked_key()}</td></tr>'
+                f'<td style="padding:3px 0;font-family:monospace;">{obj.masked_key() if obj.api_key else "(จาก ENV)"}</td></tr>'
+                f'<tr><td style="padding:3px 12px 3px 0;font-weight:bold;">📌 Key Source</td>'
+                f'<td style="padding:3px 0;">{key_source}</td></tr>'
             )
             obj.last_tested = timezone.now()
             obj.save()
@@ -961,8 +970,30 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
                 msg = '⚠️ API Key ถูกต้อง แต่ quota เกิน (429) — รอสักครู่แล้วลองใหม่'
                 level = 'WARNING'
             elif '401' in err or 'API_KEY_INVALID' in err or 'invalid_api_key' in err.lower():
-                obj.last_test_msg = 'API Key ไม่ถูกต้อง (401 Unauthorized) — ตรวจสอบ key อีกครั้ง'
-                msg = '❌ API Key ไม่ถูกต้อง (401)'
+                is_free_model = obj.model_name.endswith(':free')
+                if is_free_model:
+                    obj.last_test_msg = (
+                        f'401 Unauthorized กับ Free Model ({obj.model_name})\n'
+                        'Free models บน OpenRouter อาจใช้ไม่ได้เพราะ:\n'
+                        '• Model นี้ถูก deprecated หรือเปลี่ยนชื่อแล้ว\n'
+                        '• Account ยังไม่ได้ยืนยัน credit card (OpenRouter บังคับแม้ใช้ฟรี)\n'
+                        '→ แนะนำ: ใช้ meta-llama/llama-3.3-70b-instruct:free หรือเปลี่ยนเป็น paid model'
+                    )
+                    msg = f'❌ Free model ({obj.model_name}) ใช้ไม่ได้ — ลอง model อื่น หรือ verify credit card บน OpenRouter'
+                else:
+                    obj.last_test_msg = 'API Key ไม่ถูกต้อง (401 Unauthorized) — ตรวจสอบ key อีกครั้ง'
+                    msg = '❌ API Key ไม่ถูกต้อง (401)'
+                level = 'ERROR'
+            elif '404' in err or 'No endpoints found' in err:
+                obj.last_test_msg = (
+                    f'Model ไม่พบบน OpenRouter (404)\n'
+                    f'Model: {obj.model_name}\n'
+                    'สาเหตุที่เป็นไปได้:\n'
+                    '• Model นี้ถูกลบหรือ deprecated แล้ว\n'
+                    '• ชื่อ model ผิด\n'
+                    '→ เลือก model อื่นจาก Model Presets ด้านบน หรือดูรายการล่าสุดที่ openrouter.ai/models'
+                )
+                msg = f'❌ ไม่พบ model "{obj.model_name}" บน OpenRouter — เปลี่ยน model ใหม่'
                 level = 'ERROR'
             else:
                 obj.last_test_msg = f'เชื่อมต่อไม่ได้: {err[:200]}'
@@ -1030,15 +1061,46 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
         )
     test_connect_button.short_description = ''
 
-    # ── Model Presets Panel ──────────────────────────────────────
+    # ── Sync API Key from ENV var ────────────────────────────────
+    def _sync_env_key(self, request, pk):
+        import os
+        from django.shortcuts import redirect
+        env_key = os.getenv('OPENROUTER_API_KEY', '').strip()
+        redirect_url = f'/admin/iot_dashboard/geminiaisettings/{pk}/change/'
+        if not env_key:
+            self.message_user(request, '⚠️ OPENROUTER_API_KEY ไม่ได้ตั้งค่าใน ENV', level='WARNING')
+            return redirect(redirect_url)
+        obj = GeminiAISettings.objects.get(pk=pk)
+        obj.api_key = env_key
+        obj.last_test_ok = None
+        obj.last_test_msg = ''
+        obj.last_tested = None
+        obj.save()
+        self.message_user(request, '✅ บันทึก API Key จาก OPENROUTER_API_KEY env เรียบร้อย — กด Test Connection เพื่อทดสอบ')
+        return redirect(redirect_url)
+
+    def sync_env_button(self, obj):
+        if not obj or not obj.pk:
+            return '-'
+        return format_html(
+            '<a href="/admin/iot_dashboard/geminiaisettings/{}/sync-env-key/" '
+            'class="button" '
+            'style="display:inline-block;padding:6px 16px;background:#198754;color:#fff;'
+            'border-radius:4px;text-decoration:none;font-size:13px;font-weight:bold;">'
+            '🔄 Sync API Key จาก ENV</a>',
+            obj.pk
+        )
+    sync_env_button.short_description = ''
+
+
     def model_presets_panel(self, obj):
         OPENROUTER_MODELS = [
-            ('🆓 Free', [
-                ('google/gemini-2.0-flash-exp:free',            'Gemini 2.0 Flash Exp (Free)'),
-                ('google/gemini-2.5-pro-exp-03-25:free',        'Gemini 2.5 Pro Exp (Free)'),
-                ('meta-llama/llama-3.3-70b-instruct:free',      'Llama 3.3 70B (Free)'),
-                ('deepseek/deepseek-chat:free',                 'DeepSeek Chat (Free)'),
-                ('mistralai/mistral-7b-instruct:free',          'Mistral 7B (Free)'),
+            ('🆓 Free (ต้อง verify credit card บน openrouter.ai ก่อน)', [
+                ('meta-llama/llama-3.3-70b-instruct:free',      'Llama 3.3 70B ✅ แนะนำ'),
+                ('deepseek/deepseek-r1:free',                   'DeepSeek R1 ✅'),
+                ('deepseek/deepseek-chat-v3-0324:free',         'DeepSeek Chat V3'),
+                ('mistralai/mistral-7b-instruct:free',          'Mistral 7B'),
+                ('qwen/qwen3-8b:free',                          'Qwen3 8B'),
             ]),
             ('💎 Paid', [
                 ('google/gemini-2.0-flash-001',                 'Gemini 2.0 Flash'),
