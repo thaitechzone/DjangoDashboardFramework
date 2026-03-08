@@ -131,9 +131,9 @@ git push origin 16_AddN8NAnalyzer
 
 | Key | Value |
 |---|---|
-| `OPENWEATHER_API_KEY` | `1bef650d2c6ea7a91f58252948c2d325` |
+| `OPENWEATHER_API_KEY` | `` |
 | `WEATHER_LOCATION` | `Tha Sala,TH` |
-| `OPENROUTER_API_KEY` | `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` |
+| `OPENROUTER_API_KEY` | ` |
 | `AI_AGENT_INTERVAL_MINUTES` | `60` |
 
 ### N8N Push Webhooks
