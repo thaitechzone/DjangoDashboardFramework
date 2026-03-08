@@ -869,7 +869,7 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
     class Media:
         css = {'all': ('iot_dashboard/admin_custom.css',)}
 
-    readonly_fields = ('test_connect_button', 'sync_env_button', 'test_result_panel', 'model_presets_panel', 'save_inline_button')
+    readonly_fields = ('test_connect_button', 'test_result_panel', 'model_presets_panel', 'save_inline_button')
 
     fieldsets = (
         ('🤖 AI Provider Settings', {
@@ -879,7 +879,7 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
             'fields': ('api_key', 'model_name', 'model_presets_panel', 'interval_minutes', 'is_enabled', 'save_inline_button'),
         }),
         ('🧪 ผลทดสอบล่าสุด', {
-            'fields': ('test_connect_button', 'sync_env_button', 'test_result_panel'),
+            'fields': ('test_connect_button', 'test_result_panel'),
         }),
     )
 
@@ -905,9 +905,6 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
             path('<int:pk>/run-test/',
                  self.admin_site.admin_view(self._run_test),
                  name='geminiaisettings_run_test'),
-            path('<int:pk>/sync-env-key/',
-                 self.admin_site.admin_view(self._sync_env_key),
-                 name='geminiaisettings_sync_env_key'),
         ]
         return custom + urls
 
@@ -1061,36 +1058,6 @@ class GeminiAISettingsAdmin(admin.ModelAdmin):
         )
     test_connect_button.short_description = ''
 
-    # ── Sync API Key from ENV var ────────────────────────────────
-    def _sync_env_key(self, request, pk):
-        import os
-        from django.shortcuts import redirect
-        env_key = os.getenv('OPENROUTER_API_KEY', '').strip()
-        redirect_url = f'/admin/iot_dashboard/geminiaisettings/{pk}/change/'
-        if not env_key:
-            self.message_user(request, '⚠️ OPENROUTER_API_KEY ไม่ได้ตั้งค่าใน ENV', level='WARNING')
-            return redirect(redirect_url)
-        obj = GeminiAISettings.objects.get(pk=pk)
-        obj.api_key = env_key
-        obj.last_test_ok = None
-        obj.last_test_msg = ''
-        obj.last_tested = None
-        obj.save()
-        self.message_user(request, '✅ บันทึก API Key จาก OPENROUTER_API_KEY env เรียบร้อย — กด Test Connection เพื่อทดสอบ')
-        return redirect(redirect_url)
-
-    def sync_env_button(self, obj):
-        if not obj or not obj.pk:
-            return '-'
-        return format_html(
-            '<a href="/admin/iot_dashboard/geminiaisettings/{}/sync-env-key/" '
-            'class="button" '
-            'style="display:inline-block;padding:6px 16px;background:#198754;color:#fff;'
-            'border-radius:4px;text-decoration:none;font-size:13px;font-weight:bold;">'
-            '🔄 Sync API Key จาก ENV</a>',
-            obj.pk
-        )
-    sync_env_button.short_description = ''
 
 
     def model_presets_panel(self, obj):
